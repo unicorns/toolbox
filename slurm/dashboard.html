@@ -226,6 +226,20 @@
                                                 class="flex-1 h-8 rounded border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500"
                                                 placeholder="Enter your API key">
                                         </div>
+                                        <div class="flex items-center space-x-2">
+                                            <label for="model-name" class="text-sm font-medium text-gray-700 w-32">Model
+                                                Name:</label>
+                                            <input type="text" id="model-name"
+                                                class="flex-1 h-8 rounded border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                                placeholder="e.g., gpt-4o">
+                                        </div>
+                                        <div class="flex items-center space-x-2">
+                                            <label for="api-url" class="text-sm font-medium text-gray-700 w-32">API Base
+                                                URL:</label>
+                                            <input type="text" id="api-url"
+                                                class="flex-1 h-8 rounded border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                                placeholder="Optional: for custom endpoints">
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -317,6 +331,8 @@
         const timezoneSelector = document.getElementById('timezone-selector');
         const aiProviderSelector = document.getElementById('ai-provider');
         const apiKeyInput = document.getElementById('api-key');
+        const modelNameInput = document.getElementById('model-name');
+        const apiUrlInput = document.getElementById('api-url');
         const loadExampleBtn = document.getElementById('load-example-btn');
 
         // --- INITIALIZATION ---
@@ -325,8 +341,10 @@
             copyCmdBtn.addEventListener('click', handleCopyCommand);
             loadExampleBtn.addEventListener('click', loadExampleData);
             timezoneSelector.addEventListener('change', renderQueueTabBody);
+            aiProviderSelector.addEventListener('change', updateAiDefaults);
             slurmInput.addEventListener('keydown', handleTextareaKeydown);
             document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', handleTabClick));
+            updateAiDefaults();
         });
 
         // --- EVENT HANDLERS ---
@@ -381,6 +399,24 @@
         function loadExampleData() {
             slurmInput.value = getAnonymizedExampleData();
             visualizeBtn.click();
+        }
+
+        function updateAiDefaults() {
+            const provider = aiProviderSelector.value;
+            switch (provider) {
+                case 'gemini':
+                    modelNameInput.value = 'gemini-2.5-flash';
+                    apiUrlInput.placeholder = 'Optional: for custom endpoints';
+                    break;
+                case 'openai':
+                    modelNameInput.value = 'gpt-4o';
+                    apiUrlInput.placeholder = 'Optional: e.g., https://api.openai.com/v1';
+                    break;
+                case 'groq':
+                    modelNameInput.value = 'compound-beta';
+                    apiUrlInput.placeholder = 'Optional: e.g., https://api.groq.com/openai/v1';
+                    break;
+            }
         }
 
         // --- PARSING LOGIC ---
@@ -874,6 +910,8 @@
             const outputDiv = btn.nextElementSibling;
             const provider = aiProviderSelector.value;
             const apiKey = apiKeyInput.value;
+            const model = modelNameInput.value;
+            const apiUrlOverride = apiUrlInput.value;
 
             if (provider !== 'gemini' && !apiKey) {
                 showMessage('API Key is required for the selected provider.', 'error');
@@ -904,7 +942,7 @@
             }
 
             try {
-                const summaryText = await callLLM(provider, apiKey, prompt);
+                const summaryText = await callLLM(provider, apiKey, model, apiUrlOverride, prompt);
                 outputDiv.innerHTML = marked.parse(summaryText);
             } catch (error) {
                 outputDiv.innerHTML = `<strong>Error:</strong> Could not generate summary. ${error.message}`;
@@ -914,23 +952,28 @@
             }
         }
 
-        async function callLLM(provider, apiKey, prompt) {
+        async function callLLM(provider, apiKey, model, apiUrlOverride, prompt) {
             let apiUrl, payload, headers;
+            let finalModel = model;
 
             switch (provider) {
                 case 'gemini':
-                    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                    apiUrl = apiUrlOverride || `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+                    if (!model) finalModel = 'gemini-1.5-flash';
+                    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${finalModel}:generateContent?key=${apiKey}`;
                     payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
                     headers = { 'Content-Type': 'application/json' };
                     break;
                 case 'openai':
-                    apiUrl = 'https://api.openai.com/v1/chat/completions';
-                    payload = { model: "gpt-3.5-turbo", messages: [{ role: "user", content: prompt }] };
+                    apiUrl = apiUrlOverride || 'https://api.openai.com/v1/chat/completions';
+                    if (!model) finalModel = 'gpt-4o';
+                    payload = { model: finalModel, messages: [{ role: "user", content: prompt }] };
                     headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
                     break;
                 case 'groq':
-                    apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
-                    payload = { model: "llama3-8b-8192", messages: [{ role: "user", content: prompt }] };
+                    apiUrl = apiUrlOverride || 'https://api.groq.com/openai/v1/chat/completions';
+                    if (!model) finalModel = 'llama3-8b-8192';
+                    payload = { model: finalModel, messages: [{ role: "user", content: prompt }] };
                     headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
                     break;
                 default:
@@ -946,10 +989,16 @@
 
             switch (provider) {
                 case 'gemini':
-                    return result.candidates[0].content.parts[0].text;
+                    if (result.candidates && result.candidates[0].content.parts[0].text) {
+                        return result.candidates[0].content.parts[0].text;
+                    }
+                    throw new Error("Invalid Gemini response structure.");
                 case 'openai':
                 case 'groq':
-                    return result.choices[0].message.content;
+                    if (result.choices && result.choices[0].message.content) {
+                        return result.choices[0].message.content;
+                    }
+                    throw new Error("Invalid OpenAI/Groq response structure.");
             }
         }
 
