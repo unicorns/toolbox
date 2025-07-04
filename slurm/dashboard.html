@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slurm Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .tab-btn {
+            transition: all 0.2s ease-in-out;
+        }
+
+        .tab-btn.active {
+            border-color: #4f46e5;
+            color: #4f46e5;
+            background-color: #eef2ff;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .progress-bar {
+            background-color: #e5e7eb;
+            border-radius: 0.375rem;
+            overflow: hidden;
+        }
+
+        .progress-bar-inner {
+            height: 1.25rem;
+            border-radius: 0.375rem;
+            text-align: center;
+            color: white;
+            font-weight: 600;
+            font-size: 0.75rem;
+            line-height: 1.25rem;
+            transition: width 0.3s ease-in-out;
+        }
+
+        .ai-content {
+            background-color: #f3f4f6;
+            border-left: 4px solid #4f46e5;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .ai-content h3,
+        .ai-content h4 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .ai-content p {
+            margin-bottom: 0.5rem;
+        }
+
+        .ai-content ul {
+            list-style-type: disc;
+            padding-left: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .ai-content li {
+            margin-bottom: 0.25rem;
+        }
+
+        .spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .details-row.hidden {
+            display: none;
+        }
+
+        .job-row .arrow {
+            transition: transform 0.2s;
+        }
+
+        .job-row.open .arrow {
+            transform: rotate(90deg);
+        }
+
+        .tooltip-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .tooltip {
+            visibility: hidden;
+            width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -125px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .tooltip-container:hover .tooltip {
+            visibility: visible;
+            opacity: 1;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-6">
+        <header class="text-center mb-6">
+            <h1 class="text-4xl font-bold text-gray-900">Slurm AI Dashboard</h1>
+            <p class="text-lg text-gray-600 mt-2">An interactive dashboard for visualizing your Slurm cluster's status.
+            </p>
+        </header>
+
+        <main>
+            <!-- Input Section -->
+            <div class="bg-white p-6 rounded-lg shadow-lg mb-8 max-w-6xl mx-auto">
+                <p class="text-gray-700 mb-6">This tool parses the output of standard Slurm commands to create a
+                    user-friendly, visual representation of your cluster's partitions, nodes, and job queue. Paste your
+                    command outputs below to get started.</p>
+
+                <div class="bg-gray-100 p-4 rounded-lg mb-6">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="block text-sm font-bold text-gray-700">Recommended All-in-One Command</label>
+                        <button id="copy-cmd-btn"
+                            class="bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-md hover:bg-gray-700 transition duration-200">Copy</button>
+                    </div>
+                    <pre
+                        class="bg-gray-800 text-white p-3 rounded-md text-xs overflow-x-auto"><code id="slurm-commands">scontrol show partition --oneliner; echo "---"; scontrol show node --oneliner; echo "---"; squeue --all -o "%.18i %.9P %.30j %.8u %.8T %.10M %.10l %.6D %R"; echo "---"; scontrol show job --oneliner; echo "---"; date --iso-8601=seconds</code></pre>
+                </div>
+
+                <label for="slurm-input" class="block text-lg font-medium text-gray-700 mb-2">Paste Slurm Command
+                    Outputs Here</label>
+                <p class="text-sm text-gray-500 mb-4">The app will automatically detect and parse the combined output
+                    from the command above.</p>
+                <textarea id="slurm-input" rows="12"
+                    class="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                    placeholder="Paste one or more command outputs..."></textarea>
+                <div class="mt-4 flex flex-col sm:flex-row gap-2">
+                    <button id="visualize-btn"
+                        class="w-full sm:w-1/2 bg-indigo-600 text-white font-bold py-3 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-300">
+                        Analyze Cluster Data
+                    </button>
+                    <button id="load-example-btn"
+                        class="w-full sm:w-1/2 bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition duration-300">
+                        Load Example Data
+                    </button>
+                </div>
+
+                <!-- Configuration Pane -->
+                <div id="configuration-pane" class="hidden mt-6 border-t pt-6">
+                    <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">Configuration</h3>
+                            <div class="p-4 bg-gray-50 rounded-lg space-y-6">
+                                <!-- Timezone Section -->
+                                <div>
+                                    <h4 class="text-md font-semibold text-gray-800 mb-2">Display & Timezone</h4>
+                                    <div class="flex items-center space-x-2">
+                                        <label for="timezone-selector"
+                                            class="text-sm font-medium text-gray-700 w-32">Data Timestamp:</label>
+                                        <select id="timezone-selector"
+                                            class="flex-1 h-8 rounded border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                                            <option value="auto" disabled>Auto-Detect</option>
+                                            <option value="utc">UTC</option>
+                                            <option value="local">Local (Browser)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <!-- AI Section -->
+                                <div>
+                                    <h4 class="text-md font-semibold text-gray-800 mb-2">AI Feature Settings</h4>
+                                    <p class="text-xs text-gray-500 mb-3">AI features are optional. Provide an API key
+                                        to enable them.</p>
+                                    <div class="space-y-4">
+                                        <div class="flex items-center space-x-2">
+                                            <label for="ai-provider" class="text-sm font-medium text-gray-700 w-32">AI
+                                                Provider:</label>
+                                            <select id="ai-provider"
+                                                class="flex-1 h-8 rounded border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                                                <option value="gemini">Google Gemini</option>
+                                                <option value="openai">OpenAI</option>
+                                                <option value="groq">Groq</option>
+                                            </select>
+                                        </div>
+                                        <div class="flex items-center space-x-2">
+                                            <label for="api-key" class="text-sm font-medium text-gray-700 w-32">API
+                                                Key:</label>
+                                            <input type="password" id="api-key"
+                                                class="flex-1 h-8 rounded border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                                placeholder="Enter your API key">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-medium text-gray-900 mb-4">UI Legend</h3>
+                            <div id="legend-options" class="p-4 bg-gray-50 rounded-lg text-sm space-y-2">
+                                <div class="flex items-center"><span
+                                        class="ml-2 text-xs font-semibold bg-orange-200 text-orange-800 px-2 py-0.5 rounded-full">P</span><span
+                                        class="ml-2">= Preemptible Partition</span></div>
+                                <div class="flex items-center"><span
+                                        class="inline-block bg-indigo-600 text-white font-semibold text-xs mr-1 mb-1 px-2 py-0.5 rounded-full">Partition</span><span
+                                        class="ml-2">= Partition with active jobs on a node</span></div>
+                                <div class="flex items-center"><span
+                                        class="inline-block bg-gray-200 text-gray-700 text-xs mr-1 mb-1 px-2 py-0.5 rounded-full">Partition</span><span
+                                        class="ml-2">= Partition with no active jobs on a node</span></div>
+                                <div class="flex items-center"><span
+                                        class="text-sm font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-800">STATE</span><span
+                                        class="ml-2">= Node is fully or partially allocated</span></div>
+                                <div class="flex items-center"><span
+                                        class="text-sm font-semibold px-2 py-1 rounded-full bg-green-100 text-green-800">STATE</span><span
+                                        class="ml-2">= Node is idle</span></div>
+                                <div class="flex items-center"><span
+                                        class="text-sm font-semibold px-2 py-1 rounded-full bg-red-100 text-red-800">STATE</span><span
+                                        class="ml-2">= Node is down, drained, or unavailable</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div id="dashboard-tabs" class="hidden max-w-7xl mx-auto">
+                <div class="border-b border-gray-200 mb-6">
+                    <nav class="flex -mb-px space-x-6" aria-label="Tabs">
+                        <button
+                            class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                            data-tab="partitions">Partitions</button>
+                        <button
+                            class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                            data-tab="nodes">Node Details</button>
+                        <button
+                            class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                            data-tab="queue">Job Queue</button>
+                    </nav>
+                </div>
+
+                <!-- Partitions Tab -->
+                <div id="tab-partitions" class="tab-content">
+                    <div id="partitions-ai-container" class="mb-6"></div>
+                    <div id="partitions-output" class="space-y-6"></div>
+                </div>
+
+                <!-- Nodes Tab -->
+                <div id="tab-nodes" class="tab-content">
+                    <div id="nodes-ai-container" class="mb-6"></div>
+                    <div id="nodes-output" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
+                </div>
+
+                <!-- Queue Tab -->
+                <div id="tab-queue" class="tab-content">
+                    <div id="queue-ai-container" class="mb-4"></div>
+                    <div id="queue-output" class="bg-white p-4 rounded-lg shadow-md overflow-x-auto"></div>
+                </div>
+            </div>
+
+            <div id="message-box"
+                class="hidden fixed bottom-5 right-5 bg-red-500 text-white py-3 px-5 rounded-lg shadow-xl"></div>
+        </main>
+    </div>
+
+    <script>
+        // --- GLOBAL STATE ---
+        let parsedData = {
+            partitions: new Map(),
+            nodes: new Map(),
+            queue: [],
+            clusterDate: null,
+            detectedTimezone: null
+        };
+
+        // --- DOM ELEMENT REFERENCES ---
+        const visualizeBtn = document.getElementById('visualize-btn');
+        const slurmInput = document.getElementById('slurm-input');
+        const dashboardTabs = document.getElementById('dashboard-tabs');
+        const messageBox = document.getElementById('message-box');
+        const copyCmdBtn = document.getElementById('copy-cmd-btn');
+        const configurationPane = document.getElementById('configuration-pane');
+        const timezoneSelector = document.getElementById('timezone-selector');
+        const aiProviderSelector = document.getElementById('ai-provider');
+        const apiKeyInput = document.getElementById('api-key');
+        const loadExampleBtn = document.getElementById('load-example-btn');
+
+        // --- INITIALIZATION ---
+        document.addEventListener('DOMContentLoaded', () => {
+            visualizeBtn.addEventListener('click', handleVisualize);
+            copyCmdBtn.addEventListener('click', handleCopyCommand);
+            loadExampleBtn.addEventListener('click', loadExampleData);
+            timezoneSelector.addEventListener('change', renderQueueTabBody);
+            slurmInput.addEventListener('keydown', handleTextareaKeydown);
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', handleTabClick));
+        });
+
+        // --- EVENT HANDLERS ---
+        function handleVisualize() {
+            const inputData = slurmInput.value.trim();
+            if (!inputData) {
+                showMessage("Please paste some Slurm output first.", "error");
+                return;
+            }
+            try {
+                parsedData = { partitions: new Map(), nodes: new Map(), queue: [], clusterDate: null, detectedTimezone: null };
+                detectAndParseAll(inputData);
+                renderConfigurationPane();
+                renderAllTabs();
+                dashboardTabs.classList.remove('hidden');
+                const firstTab = parsedData.partitions.size > 0 ? 'partitions' : (parsedData.nodes.size > 0 ? 'nodes' : 'queue');
+                switchTab(firstTab);
+            } catch (error) {
+                console.error("Error during visualization:", error);
+                showMessage(`Could not process input. Error: ${error.message}`, "error");
+            }
+        }
+
+        function handleTabClick(event) {
+            switchTab(event.target.dataset.tab);
+        }
+
+        function handleCopyCommand() {
+            const commandText = document.getElementById('slurm-commands').textContent;
+            const textarea = document.createElement('textarea');
+            textarea.value = commandText;
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                copyCmdBtn.textContent = 'Copied!';
+                setTimeout(() => { copyCmdBtn.textContent = 'Copy'; }, 2000);
+            } catch (err) {
+                console.error('Failed to copy command: ', err);
+                showMessage('Failed to copy command.', 'error');
+            }
+            document.body.removeChild(textarea);
+        }
+
+        function handleTextareaKeydown(event) {
+            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                visualizeBtn.click();
+            }
+        }
+
+        function loadExampleData() {
+            slurmInput.value = getAnonymizedExampleData();
+            visualizeBtn.click();
+        }
+
+        // --- PARSING LOGIC ---
+        function detectAndParseAll(rawData) {
+            const lines = rawData.split('\n');
+            const partitionLines = [], nodeLines = [], squeueLines = [], jobDetailLines = [];
+            let squeueHeaderDetected = false;
+            let dateLine = null;
+
+            lines.forEach(line => {
+                const trimmedLine = line.trim();
+                const isoDateRegex = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})([-+]\d{2}:\d{2}|Z)/;
+                const match = trimmedLine.match(isoDateRegex);
+
+                if (trimmedLine.startsWith('---') || trimmedLine === '') return;
+
+                if (match && trimmedLine.length < 50) {
+                    dateLine = trimmedLine;
+                    parsedData.detectedTimezone = match[2];
+                }
+                else if (trimmedLine.startsWith('PartitionName=')) partitionLines.push(trimmedLine);
+                else if (trimmedLine.startsWith('NodeName=')) nodeLines.push(trimmedLine);
+                else if (trimmedLine.startsWith('JobId=')) jobDetailLines.push(trimmedLine);
+                else if (trimmedLine.startsWith('JOBID') && trimmedLine.includes('PARTITION')) squeueHeaderDetected = true;
+                else if (squeueHeaderDetected && trimmedLine) squeueLines.push(trimmedLine);
+            });
+
+            if (dateLine) parsedData.clusterDate = dateLine;
+            squeueLines.forEach(parseSqueue);
+            jobDetailLines.forEach(parseScontrolJob);
+            partitionLines.forEach(parseScontrolPartition);
+            nodeLines.forEach(parseScontrolNode);
+        }
+
+        function parseScontrolPartition(line) {
+            const details = parseKeyValueString(line);
+            if (details.PartitionName) {
+                parsedData.partitions.set(details.PartitionName, {
+                    nodes: new Set(expandNodeList(details.Nodes || '')),
+                    details: details
+                });
+            }
+        }
+
+        function parseScontrolNode(line) {
+            const details = parseKeyValueString(line);
+            if (details.NodeName) {
+                parsedData.nodes.set(details.NodeName, { details });
+            }
+        }
+
+        function parseSqueue(line) {
+            const parts = line.trim().split(/\s+/);
+            if (parts.length >= 8) {
+                const job = {
+                    JobId: parts[0], Partition: parts[1], Name: parts[2], User: parts[3], State: parts[4],
+                    Time: parts[5], TimeLimit: parts[6], Nodes: parts[7], NodeList: parts.slice(8).join(' ')
+                };
+                if (!parsedData.queue.some(j => j.JobId === job.JobId)) {
+                    parsedData.queue.push(job);
+                }
+            }
+        }
+
+        function parseScontrolJob(line) {
+            const details = parseKeyValueString(line);
+            const jobId = details.JobId;
+            if (!jobId) return;
+
+            const jobIndex = parsedData.queue.findIndex(j => j.JobId === jobId);
+            if (jobIndex !== -1) {
+                parsedData.queue[jobIndex] = { ...parsedData.queue[jobIndex], ...details, details: details };
+            } else {
+                parsedData.queue.push({
+                    JobId: details.JobId, Partition: details.Partition, Name: details.JobName,
+                    User: (details.UserId || '').split('(')[0], State: details.JobState, Time: details.RunTime,
+                    NodeList: details.NodeList, details: details
+                });
+            }
+        }
+
+        function parseKeyValueString(str) {
+            const data = {};
+            str.split(' ').forEach(pair => {
+                const [key, ...valueParts] = pair.split('=');
+                if (key) data[key] = valueParts.join('=');
+            });
+            return data;
+        }
+
+        function expandNodeList(nodesStr) {
+            if (!nodesStr || nodesStr === '(null)') return [];
+            const finalNodes = new Set();
+            const nodeTokens = nodesStr.match(/[^,\[]+\[[^\]]+\]|[^,]+/g) || [];
+            nodeTokens.forEach(token => {
+                const match = token.match(/^([^[]+)\[([^\]]+)\](.*)$/);
+                if (match) {
+                    const prefix = match[1], rangeStr = match[2], suffix = match[3] || '';
+                    rangeStr.split(',').forEach(item => {
+                        const rangeMatch = item.match(/^(\d+)-(\d+)$/);
+                        if (rangeMatch) {
+                            const start = parseInt(rangeMatch[1]), end = parseInt(rangeMatch[2]), padding = rangeMatch[1].length;
+                            for (let i = start; i <= end; i++) finalNodes.add(`${prefix}${String(i).padStart(padding, '0')}${suffix}`);
+                        } else {
+                            finalNodes.add(`${prefix}${item}${suffix}`);
+                        }
+                    });
+                } else if (token) {
+                    finalNodes.add(token);
+                }
+            });
+            return Array.from(finalNodes);
+        }
+
+        function parseMemoryToMB(memString) {
+            if (!memString || typeof memString !== 'string') return 0;
+            const value = parseFloat(memString);
+            if (isNaN(value)) return 0;
+            const unit = memString.slice(-1).toUpperCase();
+            switch (unit) {
+                case 'G': return value * 1024;
+                case 'T': return value * 1024 * 1024;
+                case 'K': return value / 1024;
+                case 'M':
+                default: return value;
+            }
+        }
+
+        function parseTRES(tresString) {
+            const resources = { cpu: '0', mem: 'N/A', gres: {} };
+            if (!tresString) return resources;
+            tresString.split(',').forEach(res => {
+                const [key, value] = res.split('=');
+                if (key === 'cpu') resources.cpu = value;
+                else if (key === 'mem') resources.mem = value;
+                else if (key.startsWith('gres/')) {
+                    const gresName = key.substring(5);
+                    resources.gres[gresName] = value;
+                }
+            });
+            return resources;
+        }
+
+        function parseUnitValue(valueString) {
+            if (!valueString || typeof valueString !== 'string') return 0;
+            const value = parseFloat(valueString);
+            if (isNaN(value)) return 0;
+            const unit = valueString.match(/[KMG]$/i);
+            if (!unit) return value;
+            switch (unit[0].toUpperCase()) {
+                case 'K': return value * 1000;
+                case 'M': return value * 1000 * 1000;
+                case 'G': return value * 1000 * 1000 * 1000;
+                default: return value;
+            }
+        }
+
+        function parseGresField(gresString) {
+            const gresMap = {};
+            if (!gresString) return gresMap;
+            gresString.split(',').forEach(g => {
+                const parts = g.split(':');
+                if (parts.length >= 2) {
+                    const gresName = parts.slice(0, -1).join(':');
+                    const valueStr = parts[parts.length - 1].replace(/\(.*\)/, ''); // Remove socket info like (S:0-5)
+                    gresMap[gresName] = parseUnitValue(valueStr);
+                }
+            });
+            return gresMap;
+        }
+
+        // --- RENDERING LOGIC ---
+        function renderAllTabs() {
+            renderPartitionsTab();
+            renderNodesTab();
+            renderQueueTab();
+        }
+
+        function renderConfigurationPane() {
+            configurationPane.classList.remove('hidden');
+            const autoDetectOption = timezoneSelector.querySelector('option[value="auto"]');
+            if (parsedData.detectedTimezone) {
+                autoDetectOption.disabled = false;
+                autoDetectOption.textContent = `Auto-Detect (${parsedData.detectedTimezone})`;
+                timezoneSelector.value = 'auto';
+            } else {
+                autoDetectOption.disabled = true;
+                autoDetectOption.textContent = 'Auto-Detect (No date found)';
+                timezoneSelector.value = 'local';
+            }
+        }
+
+        function renderPartitionsTab() {
+            const container = document.getElementById('partitions-output');
+            const aiContainer = document.getElementById('partitions-ai-container');
+            container.innerHTML = '';
+            aiContainer.innerHTML = '';
+            if (parsedData.partitions.size === 0) {
+                container.innerHTML = `<p class="text-center text-gray-500">No partition data found. Paste output from 'scontrol show partition'.</p>`;
+                return;
+            }
+            renderAiButton('partitions', '✨ Generate AI Summary of Partitions', handleAiSummary);
+            const sortedPartitions = new Map([...parsedData.partitions.entries()].sort());
+            sortedPartitions.forEach(({ nodes, details }, name) => {
+                const card = document.createElement('div');
+                card.className = 'bg-white p-6 rounded-lg shadow-md';
+                const sortedNodes = Array.from(nodes).sort();
+                const nodesHtml = sortedNodes.length > 0
+                    ? sortedNodes.map(node => `<span class="inline-block bg-gray-200 text-gray-800 text-xs font-medium mr-2 mb-2 px-2.5 py-0.5 rounded-full">${node}</span>`).join('')
+                    : `<p class="text-gray-500">No nodes listed.</p>`;
+
+                const defaultBadge = details.Default === 'YES' ? `<span class="ml-3 bg-yellow-200 text-yellow-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">Default</span>` : '';
+
+                card.innerHTML = `
+                    <div class="flex items-center border-b pb-3 mb-4">
+                        <h2 class="text-xl font-bold text-gray-800">${name}</h2>
+                        ${defaultBadge}
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
+                        <div><strong class="block text-gray-500">State</strong><span class="font-semibold">${details.State}</span></div>
+                        <div><strong class="block text-gray-500">Total Nodes</strong><span class="font-semibold">${details.TotalNodes}</span></div>
+                        <div><strong class="block text-gray-500">Total CPUs</strong><span class="font-semibold">${details.TotalCPUs}</span></div>
+                        <div><strong class="block text-gray-500">Max Time</strong><span class="font-semibold">${details.MaxTime}</span></div>
+                    </div>
+                    <div>
+                        <h3 class="text-md font-semibold text-gray-700 mb-2">Nodes (${sortedNodes.length})</h3>
+                        <div class="flex flex-wrap">${nodesHtml}</div>
+                    </div>
+                 `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderNodesTab() {
+            const container = document.getElementById('nodes-output');
+            const aiContainer = document.getElementById('nodes-ai-container');
+            container.innerHTML = '';
+            aiContainer.innerHTML = '';
+            if (parsedData.nodes.size === 0) {
+                container.innerHTML = `<p class="text-center text-gray-500 col-span-full">No node data found. Paste output from 'scontrol show node'.</p>`;
+                return;
+            }
+
+            const nodeToJobsMap = new Map();
+            parsedData.queue.filter(j => j.State === 'RUNNING' || j.State === 'R').forEach(job => {
+                expandNodeList(job.NodeList || (job.details && job.details.NodeList) || '').forEach(nodeName => {
+                    if (!nodeToJobsMap.has(nodeName)) nodeToJobsMap.set(nodeName, []);
+                    nodeToJobsMap.get(nodeName).push(job);
+                });
+            });
+
+            renderAiButton('nodes', '✨ Generate AI Summary of Node Health', handleAiSummary);
+            parsedData.nodes.forEach(({ details }, name) => {
+                const card = document.createElement('div');
+                card.className = 'bg-white p-4 rounded-lg shadow-md flex flex-col space-y-3';
+
+                const cfgTRES = parseTRES(details.CfgTRES || '');
+                const allocTRES = parseTRES(details.AllocTRES || '');
+
+                const cpuTot = parseInt(cfgTRES.cpu || details.CPUTot || '0');
+                const cpuAlloc = parseInt(allocTRES.cpu || details.CPUAlloc || '0');
+                const memTot = parseMemoryToMB(cfgTRES.mem || details.RealMemory);
+                const memAlloc = parseMemoryToMB(allocTRES.mem || details.AllocMem);
+
+                const cpuPct = cpuTot > 0 ? (cpuAlloc / cpuTot * 100).toFixed(1) : 0;
+                const memPct = memTot > 0 ? (memAlloc / memTot * 100).toFixed(1) : 0;
+
+                const configuredGres = parseGresField(details.Gres);
+                const allGresKeys = new Set([...Object.keys(cfgTRES.gres), ...Object.keys(allocTRES.gres), ...Object.keys(configuredGres)]);
+
+                const gresGroups = new Map();
+                allGresKeys.forEach(key => {
+                    const baseType = key.split(':')[0];
+                    if (!gresGroups.has(baseType)) {
+                        gresGroups.set(baseType, []);
+                    }
+                    gresGroups.get(baseType).push(key);
+                });
+
+                let gresHtml = '';
+                gresGroups.forEach((keys, baseType) => {
+                    const genericKey = baseType;
+                    const subtypes = keys.filter(k => k !== genericKey);
+
+                    if (keys.includes(genericKey) && subtypes.length > 0) {
+                        const total = parseInt(cfgTRES.gres[genericKey] || '0');
+                        const allocated = parseInt(allocTRES.gres[genericKey] || '0');
+                        const pct = total > 0 ? (allocated / total * 100).toFixed(1) : 0;
+                        const tooltipHtml = `
+                            <div class="tooltip-container">
+                                <span class="text-gray-400 cursor-help">(i)</span>
+                                <span class="tooltip">A GRES subtype may appear available if a job requested the resource generically (e.g., --gres=${genericKey}:1). Check the (TOTAL) allocation for true usage.</span>
+                            </div>`;
+                        let subtypeHtml = '<div class="ml-4 mt-2 pl-4 border-l-2 border-gray-200 space-y-2">';
+                        subtypes.forEach(subtypeKey => {
+                            const subTotal = parseInt(configuredGres[subtypeKey] || cfgTRES.gres[subtypeKey] || '0');
+                            const subAllocated = parseInt(allocTRES.gres[subtypeKey] || '0');
+                            const subPct = subTotal > 0 ? (subAllocated / subTotal * 100).toFixed(1) : 0;
+                            subtypeHtml += `<div><span class="text-sm font-medium">GRES/${subtypeKey.toUpperCase()}: ${subAllocated}/${subTotal} (${subPct}%)</span><div class="progress-bar"><div class="progress-bar-inner bg-violet-500" style="width: ${subPct}%;"></div></div></div>`;
+                        });
+                        subtypeHtml += '</div>';
+                        gresHtml += `<div><span class="text-sm font-medium">GRES/${genericKey.toUpperCase()} (TOTAL): ${allocated}/${total} (${pct}%)</span> ${tooltipHtml}<div class="progress-bar"><div class="progress-bar-inner bg-purple-600" style="width: ${pct}%;"></div></div></div>${subtypeHtml}`;
+                    } else {
+                        keys.forEach(key => {
+                            const total = parseInt(configuredGres[key] || cfgTRES.gres[key] || '0');
+                            const allocated = parseInt(allocTRES.gres[key] || '0');
+                            if (total === 0 && allocated === 0) return;
+                            const pct = total > 0 ? (allocated / total * 100).toFixed(1) : 0;
+                            const color = baseType === 'gpu' ? 'bg-purple-600' : 'bg-teal-500';
+                            gresHtml += `<div><span class="text-sm font-medium">GRES/${key.toUpperCase()}: ${allocated}/${total} (${pct}%)</span><div class="progress-bar"><div class="progress-bar-inner ${color}" style="width: ${pct}%;"></div></div></div>`;
+                        });
+                    }
+                });
+
+                const runningJobsOnThisNode = nodeToJobsMap.get(name) || [];
+                const activePartitionsOnThisNode = new Set(runningJobsOnThisNode.map(j => j.Partition));
+
+                const partitionsList = (details.Partitions || '').split(',');
+                const partitionsHtml = partitionsList[0] ? partitionsList.map(p => {
+                    const style = activePartitionsOnThisNode.has(p) ? 'bg-indigo-600 text-white font-semibold' : 'bg-gray-200 text-gray-700';
+                    return `<span class="inline-block ${style} text-xs mr-1 mb-1 px-2 py-0.5 rounded-full">${p}</span>`;
+                }).join('') : '<span class="text-xs text-gray-500">No partitions</span>';
+
+                const jobsHtml = runningJobsOnThisNode.length > 0 ? `
+                    <div class="pt-2 border-t border-gray-200 mt-2">
+                        <h4 class="text-xs font-bold text-gray-500 mb-2 uppercase">Active Jobs</h4>
+                        <div class="space-y-1">${runningJobsOnThisNode.map(job => {
+                    let resourcesHtml = '';
+                    const jobTresString = job.details ? (job.details.AllocTRES && job.details.AllocTRES !== '(null)' ? job.details.AllocTRES : job.details.TRES) : null;
+                    if (jobTresString) {
+                        const tres = parseTRES(jobTresString);
+                        const gresParts = [];
+                        for (const [key, val] of Object.entries(tres.gres)) {
+                            if (key === 'gpu' && Object.keys(tres.gres).some(k => k.startsWith('gpu:'))) continue;
+                            gresParts.push(`<span><strong class="font-semibold">GRES/${key.toUpperCase()}:</strong> ${val}</span>`);
+                        }
+                        resourcesHtml = `
+                                    <div class="text-gray-600 mt-1 flex space-x-3">
+                                        <span><strong class="font-semibold">CPU:</strong> ${tres.cpu}</span>
+                                        <span><strong class="font-semibold">Mem:</strong> ${tres.mem}</span>
+                                        ${gresParts.join(' ')}
+                                    </div>
+                                `;
+                    }
+                    return `<div class="text-xs p-2 bg-gray-50 rounded"><div><span class="font-mono font-semibold">${job.JobId}</span> <span class="font-medium text-gray-600">(${job.User})</span><span class="font-medium text-indigo-700 float-right">${job.Partition}</span></div>${resourcesHtml}</div>`;
+                }).join('')}
+                        </div>
+                    </div>` : '';
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <h3 class="font-bold text-lg">${name}</h3>
+                        <span class="text-sm font-semibold px-2 py-1 rounded-full ${getNodeStateColor(details.State)}">${details.State}</span>
+                    </div>
+                    <div><span class="text-sm font-medium">CPU: ${cpuAlloc}/${cpuTot} (${cpuPct}%)</span><div class="progress-bar"><div class="progress-bar-inner bg-blue-500" style="width: ${cpuPct}%;"></div></div></div>
+                    <div><span class="text-sm font-medium">Memory: ${memAlloc.toFixed(0)}MB / ${memTot.toFixed(0)}MB (${memPct}%)</span><div class="progress-bar"><div class="progress-bar-inner bg-green-500" style="width: ${memPct}%;"></div></div></div>
+                    ${gresHtml}
+                    <div class="pt-2 border-t border-gray-200 mt-2"><h4 class="text-xs font-bold text-gray-500 mb-1 uppercase">Partitions</h4><div class="flex flex-wrap">${partitionsHtml}</div></div>
+                    ${jobsHtml}`;
+                container.appendChild(card);
+            });
+        }
+
+        function renderQueueTab() {
+            const container = document.getElementById('queue-output');
+            const aiContainer = document.getElementById('queue-ai-container');
+            container.innerHTML = '';
+            if (aiContainer) aiContainer.innerHTML = '';
+
+            if (parsedData.queue.length === 0) {
+                container.innerHTML = `<p class="text-center text-gray-500">No queue data found. Paste output from 'squeue' or 'scontrol show job'.</p>`;
+                return;
+            }
+            renderAiButton('queue', '✨ Generate AI Summary of Job Queue', handleAiSummary);
+
+            const table = document.createElement('table');
+            table.className = 'w-full text-sm text-left';
+            table.innerHTML = `
+                <thead class="bg-gray-50 text-xs text-gray-700 uppercase">
+                    <tr>
+                        <th class="px-2 py-3 w-4"></th>
+                        <th class="px-4 py-3">Job ID</th>
+                        <th class="px-4 py-3">User</th>
+                        <th class="px-4 py-3">Partition</th>
+                        <th class="px-4 py-3">State</th>
+                        <th class="px-4 py-3">Name</th>
+                        <th class="px-4 py-3">Start Time</th>
+                        <th class="px-4 py-3">End Time</th>
+                    </tr>
+                </thead>
+                <tbody id="job-queue-body"></tbody>`;
+            container.appendChild(table);
+            renderQueueTabBody();
+        }
+
+        function renderQueueTabBody() {
+            const tableBody = document.getElementById('job-queue-body');
+            if (!tableBody) return;
+            tableBody.innerHTML = '';
+
+            const timezoneMode = timezoneSelector.value;
+
+            parsedData.queue.forEach(job => {
+                const hasDetails = !!job.details;
+                const row = document.createElement('tr');
+                row.className = `job-row border-b hover:bg-gray-50 ${hasDetails ? 'cursor-pointer' : ''}`;
+
+                const partitionName = job.Partition;
+                const partitionInfo = parsedData.partitions.get(partitionName);
+                const isPreemptible = partitionInfo && partitionInfo.details.PreemptMode && partitionInfo.details.PreemptMode !== 'OFF';
+                const preemptibleBadge = isPreemptible ? `<span title="Preemptible: ${partitionInfo.details.PreemptMode}" class="ml-2 text-xs font-semibold bg-orange-200 text-orange-800 px-2 py-0.5 rounded-full">P</span>` : '';
+
+                const startTime = job.details ? job.details.StartTime : 'N/A';
+                const endTime = job.details ? job.details.EndTime : 'N/A';
+                const relativeStartTime = getRelativeTimeString(startTime, timezoneMode, 'ago');
+                const relativeEndTime = getRelativeTimeString(endTime, timezoneMode);
+
+                row.innerHTML = `
+                    <td class="px-2 py-2 text-center">${hasDetails ? '<span class="arrow inline-block">▶</span>' : ''}</td>
+                    <td class="px-4 py-2 font-mono">${job.JobId}</td>
+                    <td class="px-4 py-2">${job.User}</td>
+                    <td class="px-4 py-2">${partitionName}${preemptibleBadge}</td>
+                    <td class="px-4 py-2"><span class="font-semibold ${getJobStateColor(job.State)}">${job.State}</span></td>
+                    <td class="px-4 py-2 font-mono">${job.Name}</td>
+                    <td class="px-4 py-2">${startTime} <br> <span class="text-xs text-gray-500">${relativeStartTime}</span></td>
+                    <td class="px-4 py-2">${endTime} <br> <span class="text-xs text-gray-500">${relativeEndTime}</span></td>
+                `;
+                tableBody.appendChild(row);
+
+                if (hasDetails) {
+                    const detailsRow = document.createElement('tr');
+                    detailsRow.className = 'details-row hidden bg-gray-50';
+                    let detailsContent = '';
+
+                    const allocTresString = (job.details.AllocTRES && job.details.AllocTRES !== '(null)') ? job.details.AllocTRES : job.details.TRES;
+                    const reqTresString = job.details.ReqTRES && job.details.ReqTRES !== '(null)' ? job.details.ReqTRES : null;
+
+                    const createTresHtml = (tresString, title) => {
+                        if (!tresString) return '';
+                        const tres = parseTRES(tresString);
+                        let gresDetailsHtml = '';
+                        for (const [key, val] of Object.entries(tres.gres)) {
+                            if (key === 'gpu' && Object.keys(tres.gres).some(k => k.startsWith('gpu:'))) continue;
+                            gresDetailsHtml += `<span><strong class="font-semibold">GRES/${key.toUpperCase()}:</strong> ${val}</span>`;
+                        }
+                        return `<div class="mb-2"><h4 class="font-bold">${title}:</h4><div class="flex space-x-6 text-sm"><span><strong class="font-semibold">CPU:</strong> ${tres.cpu}</span><span><strong class="font-semibold">Memory:</strong> ${tres.mem}</span>${gresDetailsHtml}</div></div>`;
+                    };
+
+                    if (allocTresString && allocTresString === reqTresString) {
+                        detailsContent = createTresHtml(allocTresString, 'Allocated & Requested Resources');
+                    } else {
+                        detailsContent += createTresHtml(allocTresString, 'Allocated Resources');
+                        detailsContent += createTresHtml(reqTresString, 'Requested Resources');
+                    }
+
+                    detailsRow.innerHTML = `<td colspan="8" class="p-4">${detailsContent || 'No resource details available.'}</td>`;
+                    tableBody.appendChild(detailsRow);
+                }
+            });
+
+            tableBody.addEventListener('click', (event) => {
+                const row = event.target.closest('.job-row');
+                if (row && row.classList.contains('cursor-pointer')) {
+                    const detailsRow = row.nextElementSibling;
+                    if (detailsRow && detailsRow.classList.contains('details-row')) {
+                        row.classList.toggle('open');
+                        detailsRow.classList.toggle('hidden');
+                    }
+                }
+            });
+        }
+
+        function renderAiButton(tab, text, handler) {
+            const containerId = `${tab}-ai-container`;
+            const container = document.getElementById(containerId);
+            if (container) {
+                container.innerHTML = `
+                    <button class="ai-summary-btn w-full bg-purple-600 text-white font-bold py-3 px-4 rounded-md hover:bg-purple-700 transition duration-300 flex items-center justify-center" data-tab="${tab}">
+                        ${text}
+                    </button>
+                    <div class="ai-output ai-content hidden mt-4"></div>
+                `;
+                container.querySelector('button').addEventListener('click', handler);
+            }
+        }
+
+        // --- AI LOGIC ---
+        async function handleAiSummary(event) {
+            const btn = event.currentTarget;
+            const tab = btn.dataset.tab;
+            const outputDiv = btn.nextElementSibling;
+            const provider = aiProviderSelector.value;
+            const apiKey = apiKeyInput.value;
+
+            if (provider !== 'gemini' && !apiKey) {
+                showMessage('API Key is required for the selected provider.', 'error');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner"></span> Generating...`;
+            outputDiv.classList.remove('hidden');
+            outputDiv.innerHTML = 'Thinking...';
+
+            let prompt = '';
+            let contextData = '';
+
+            switch (tab) {
+                case 'partitions':
+                    contextData = JSON.stringify(Array.from(parsedData.partitions.values()).map(p => p.details));
+                    prompt = `You are an expert HPC administrator. Based on the following partition data, provide a concise, high-level summary. Highlight the default partition, any partitions that are down, the partitions with the most resources, and any notable time limit differences. Present in clear markdown. Data: ${contextData}`;
+                    break;
+                case 'nodes':
+                    contextData = JSON.stringify(Array.from(parsedData.nodes.values()).map(n => n.details));
+                    prompt = `You are an expert HPC administrator. Based on this node data, summarize the overall cluster health. Point out any nodes that are down, drained, or under unexpectedly high load (CPU or Memory). Mention the availability of specialized resources like GPUs. Present in clear markdown. Data: ${contextData}`;
+                    break;
+                case 'queue':
+                    contextData = JSON.stringify(parsedData.queue);
+                    prompt = `You are an expert HPC administrator. Based on this squeue output, summarize the current job queue. Highlight the number of running vs. pending jobs, identify any users with many jobs, and point out any jobs that have been pending for a long time. Present in clear markdown. Data: ${contextData}`;
+                    break;
+            }
+
+            try {
+                const summaryText = await callLLM(provider, apiKey, prompt);
+                outputDiv.innerHTML = marked.parse(summaryText);
+            } catch (error) {
+                outputDiv.innerHTML = `<strong>Error:</strong> Could not generate summary. ${error.message}`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `✨ Generate AI Summary of ${tab.charAt(0).toUpperCase() + tab.slice(1)}`;
+            }
+        }
+
+        async function callLLM(provider, apiKey, prompt) {
+            let apiUrl, payload, headers;
+
+            switch (provider) {
+                case 'gemini':
+                    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+                    payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
+                    headers = { 'Content-Type': 'application/json' };
+                    break;
+                case 'openai':
+                    apiUrl = 'https://api.openai.com/v1/chat/completions';
+                    payload = { model: "gpt-3.5-turbo", messages: [{ role: "user", content: prompt }] };
+                    headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+                    break;
+                case 'groq':
+                    apiUrl = 'https://api.groq.com/openai/v1/chat/completions';
+                    payload = { model: "llama3-8b-8192", messages: [{ role: "user", content: prompt }] };
+                    headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
+                    break;
+                default:
+                    throw new Error('Unsupported AI provider.');
+            }
+
+            const response = await fetch(apiUrl, { method: 'POST', headers: headers, body: JSON.stringify(payload) });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(`API call failed: ${errorData.error.message}`);
+            }
+            const result = await response.json();
+
+            switch (provider) {
+                case 'gemini':
+                    return result.candidates[0].content.parts[0].text;
+                case 'openai':
+                case 'groq':
+                    return result.choices[0].message.content;
+            }
+        }
+
+        // --- UTILITY & UI FUNCTIONS ---
+        function getRelativeTimeString(timeString, timeZoneMode, pastSuffix = 'ago', futurePrefix = 'in') {
+            if (!timeString || timeString === 'Unknown' || timeString === 'N/A') {
+                return '';
+            }
+
+            let dateString = timeString;
+            const hasOffset = timeString.endsWith('Z') || timeString.match(/[-+]\d{2}:\d{2}$/);
+
+            if (!hasOffset) {
+                if (timeZoneMode === 'utc' || (timeZoneMode === 'auto' && parsedData.detectedTimezone === 'Z')) {
+                    dateString = `${timeString}Z`;
+                } else if (timeZoneMode === 'auto' && parsedData.detectedTimezone) {
+                    dateString = `${timeString}${parsedData.detectedTimezone}`;
+                }
+            }
+
+            const now = new Date();
+            const targetDate = new Date(dateString);
+            if (isNaN(targetDate)) return ''; // Invalid date string
+            const diff = now - targetDate;
+
+            if (diff > 0) {
+                return `${formatRelativeTime(diff)} ${pastSuffix}`;
+            } else {
+                return `${futurePrefix} ${formatRelativeTime(-diff)}`;
+            }
+        }
+
+        function formatRelativeTime(ms) {
+            if (ms < 0) ms = -ms;
+            const seconds = Math.floor(ms / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+
+            if (days > 0) return `${days}d ${hours % 24}h`;
+            if (hours > 0) return `${hours}h ${minutes % 60}m`;
+            if (minutes > 0) return `${minutes}m`;
+            return `${seconds}s`;
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+            document.querySelector(`.tab-btn[data-tab="${tabId}"]`).classList.add('active');
+        }
+
+        function getNodeStateColor(state) {
+            if (state.includes('DOWN') || state.includes('DRAIN')) return 'bg-red-100 text-red-800';
+            if (state.includes('ALLOC')) return 'bg-blue-100 text-blue-800';
+            if (state.includes('IDLE')) return 'bg-green-100 text-green-800';
+            return 'bg-gray-100 text-gray-800';
+        }
+
+        function getJobStateColor(state) {
+            if (state === 'RUNNING' || state === 'R') return 'text-green-600';
+            if (state === 'PENDING' || state === 'PD') return 'text-yellow-600';
+            return 'text-gray-600';
+        }
+
+        function showMessage(text, type = 'info') {
+            messageBox.textContent = text;
+            messageBox.className = `fixed bottom-5 right-5 text-white py-3 px-5 rounded-lg shadow-xl ${type === 'error' ? 'bg-red-600' : 'bg-green-600'}`;
+            messageBox.classList.remove('hidden');
+            setTimeout(() => { messageBox.classList.add('hidden'); }, 4000);
+        }
+
+        function getAnonymizedExampleData() {
+            return `PartitionName=gpu-high AllowGroups=ALL AllowAccounts=project-alpha AllowQos=ALL AllocNodes=ALL Default=NO QoS=gpu_qos DefaultTime=NONE DisableRootJobs=NO ExclusiveUser=NO GraceTime=0 Hidden=NO MaxNodes=UNLIMITED MaxTime=7-00:00:00 MinNodes=0 LLN=NO MaxCPUsPerNode=UNLIMITED Nodes=node-a1,node-b[1-2] PriorityJobFactor=1 PriorityTier=100 RootOnly=NO ReqResv=NO OverSubscribe=FORCE:1 OverTimeLimit=NONE PreemptMode=REQUEUE State=UP TotalCPUs=128 TotalNodes=3 SelectTypeParameters=NONE JobDefaults=(null) DefMemPerNode=UNLIMITED MaxMemPerNode=UNLIMITED
+PartitionName=cpu-low AllowGroups=ALL AllowAccounts=ALL AllowQos=ALL AllocNodes=ALL Default=YES QoS=N/A DefaultTime=00:30:00 DisableRootJobs=NO ExclusiveUser=NO ExclusiveTopo=NO GraceTime=0 Hidden=NO MaxNodes=UNLIMITED MaxTime=1-00:00:00 MinNodes=0 LLN=NO MaxCPUsPerNode=UNLIMITED MaxCPUsPerSocket=UNLIMITED Nodes=node-c[1-2] PriorityJobFactor=1 PriorityTier=1 RootOnly=NO ReqResv=NO OverSubscribe=NO OverTimeLimit=NONE PreemptMode=OFF State=UP TotalCPUs=64 TotalNodes=2 SelectTypeParameters=NONE JobDefaults=(null) DefMemPerNode=UNLIMITED MaxMemPerNode=UNLIMITED TRES=cpu=64,mem=256000M,node=2,billing=64
+---
+NodeName=node-a1 Arch=x86_64 CoresPerSocket=1 CPUAlloc=8 CPUTot=32 CPULoad=8.60 Gres=gpu:a100:4 NodeAddr=node-a1.cluster.local NodeHostName=node-a1 Version=23.02.7 OS=Linux 5.15.0-107-generic RealMemory=256000 AllocMem=128000 FreeMem=120000 State=MIXED Partitions=gpu-high BootTime=2025-06-13T12:51:10 SlurmdStartTime=2025-06-13T12:51:56 CfgTRES=cpu=32,mem=256000M,billing=32,gres/gpu=4,gres/gpu:a100=4 AllocTRES=cpu=8,mem=128G,gres/gpu=2,gres/gpu:a100=2
+NodeName=node-b1 Arch=x86_64 CoresPerSocket=1 CPUAlloc=48 CPUTot=48 CPULoad=47.1 Gres=gpu:v100:4 NodeAddr=node-b1.cluster.local NodeHostName=node-b1 Version=23.02.7 OS=Linux 5.15.0-107-generic RealMemory=256000 AllocMem=256000 FreeMem=1000 State=ALLOCATED Partitions=gpu-high BootTime=2025-06-13T12:51:10 SlurmdStartTime=2025-06-13T12:51:56 CfgTRES=cpu=48,mem=256000M,billing=48,gres/gpu=4,gres/gpu:v100=4 AllocTRES=cpu=48,mem=256G,gres/gpu=4,gres/gpu:v100=4
+NodeName=node-b2 Arch=x86_64 CoresPerSocket=1 CPUAlloc=0 CPUTot=48 CPULoad=0.01 Gres=gpu:v100:4 NodeAddr=node-b2.cluster.local NodeHostName=node-b2 Version=23.02.7 OS=Linux 5.15.0-107-generic RealMemory=256000 AllocMem=0 FreeMem=255000 State=IDLE Partitions=gpu-high BootTime=2025-06-13T12:51:10 SlurmdStartTime=2025-06-13T12:51:56 CfgTRES=cpu=48,mem=256000M,billing=48,gres/gpu=4,gres/gpu:v100=4 AllocTRES=
+NodeName=node-c1 Arch=x86_64 CoresPerSocket=1 CPUAlloc=32 CPUTot=32 CPULoad=32.0 Gres=tmpfs:100G NodeAddr=node-c1.cluster.local NodeHostName=node-c1 Version=23.02.7 OS=Linux 5.15.0-107-generic RealMemory=128000 AllocMem=128000 FreeMem=100 State=ALLOCATED Partitions=cpu-low BootTime=2025-06-13T12:51:10 SlurmdStartTime=2025-06-13T12:51:56 CfgTRES=cpu=32,mem=128000M,billing=32 AllocTRES=cpu=32,mem=128G
+NodeName=node-c2 Arch=x86_64 CoresPerSocket=1 CPUAlloc=0 CPUTot=32 CPULoad=0.0 Gres=tmpfs:100G NodeAddr=node-c2.cluster.local NodeHostName=node-c2 Version=23.02.7 OS=Linux 5.15.0-107-generic RealMemory=128000 AllocMem=0 FreeMem=127000 State=IDLE Partitions=cpu-low BootTime=2025-06-13T12:51:10 SlurmdStartTime=2025-06-13T12:51:56 CfgTRES=cpu=32,mem=128000M,billing=32 AllocTRES=
+---
+             JOBID PARTITION                          NAME     USER      STATE       TIME  TIME_LIMIT  NODES NODELIST(REASON)
+           1336199  gpu-high                    train_model    user1    RUNNING      10:34  3-00:00:00      1 node-a1
+           1336189   cpu-low                    data_proc_1    user2    RUNNING   1-00:27:16  3-00:00:00      1 node-c1
+           1336183  gpu-high                    interactive    admin    RUNNING    1:36:51     7:00:00      1 node-b1
+           1336180  gpu-high             jupyter-notebook    user1    RUNNING    1:47:05     4:00:00      1 node-b1
+           1336166  gpu-high                    interactive    user2    RUNNING    2:48:07     3:00:00      1 node-b1
+           1336162   cpu-low                    data_proc_2    user2    PENDING       0:00  1-00:00:00      1 (Resources)
+---
+JobId=1336199 JobName=train_model UserId=user1(1001) GroupId=project-alpha(2001) JobState=RUNNING StartTime=2025-07-04T10:10:30 EndTime=2025-07-07T10:10:30 NodeList=node-a1 TRES=cpu=8,mem=64G,node=1,billing=8,gres/gpu=1,gres/gpu:a100=1
+JobId=1336189 JobName=data_proc_1 UserId=user2(1002) GroupId=project-beta(2002) JobState=RUNNING StartTime=2025-07-03T20:43:48 EndTime=2025-07-06T20:43:48 NodeList=node-c1 TRES=cpu=32,mem=128G,node=1,billing=32
+JobId=1336183 JobName=interactive UserId=admin(1000) GroupId=admin-group(2000) JobState=RUNNING StartTime=2025-07-04T19:34:13 EndTime=2025-07-05T02:34:13 NodeList=node-b1 TRES=cpu=16,mem=64G,node=1,billing=16,gres/gpu=2,gres/gpu:v100=2
+JobId=1336180 JobName=jupyter-notebook UserId=user1(1001) GroupId=project-alpha(2001) JobState=RUNNING StartTime=2025-07-04T19:23:59 EndTime=2025-07-04T23:23:59 NodeList=node-b1 TRES=cpu=16,mem=64G,node=1,billing=16,gres/gpu=1
+JobId=1336166 JobName=interactive UserId=user2(1002) GroupId=project-beta(2002) JobState=RUNNING StartTime=2025-07-04T18:22:57 EndTime=2025-07-04T21:22:57 NodeList=node-b1 TRES=cpu=16,mem=128G,node=1,billing=16,gres/gpu=1,gres/gpu:v100=2
+JobId=1336162 JobName=data_proc_2 UserId=user2(1002) GroupId=project-beta(2002) JobState=PENDING StartTime=Unknown EndTime=Unknown NodeList=(null) ReqTRES=cpu=16,mem=64G,node=1,billing=16
+---
+2025-07-04T21:22:47-07:00`;
+        }
+
+    </script>
+</body>
+
+</html>
