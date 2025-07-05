@@ -242,6 +242,10 @@
                                         </div>
                                     </div>
                                 </div>
+                                <div>
+                                    <button id="clear-storage-btn" class="text-xs text-red-500 hover:underline">Clear
+                                        Saved Data & Settings</button>
+                                </div>
                             </div>
                         </div>
                         <div>
@@ -334,21 +338,28 @@
         const modelNameInput = document.getElementById('model-name');
         const apiUrlInput = document.getElementById('api-url');
         const loadExampleBtn = document.getElementById('load-example-btn');
+        const clearStorageBtn = document.getElementById('clear-storage-btn');
 
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', () => {
-            visualizeBtn.addEventListener('click', handleVisualize);
+            visualizeBtn.addEventListener('click', () => handleVisualize(null));
             copyCmdBtn.addEventListener('click', handleCopyCommand);
             loadExampleBtn.addEventListener('click', loadExampleData);
-            timezoneSelector.addEventListener('change', renderQueueTabBody);
-            aiProviderSelector.addEventListener('change', updateAiDefaults);
+            clearStorageBtn.addEventListener('click', handleClearStorage);
+            timezoneSelector.addEventListener('change', () => { renderQueueTabBody(); saveState(); });
+            aiProviderSelector.addEventListener('change', () => { updateAiDefaults(); saveState(); });
+            apiKeyInput.addEventListener('input', saveState);
+            modelNameInput.addEventListener('input', saveState);
+            apiUrlInput.addEventListener('input', saveState);
             slurmInput.addEventListener('keydown', handleTextareaKeydown);
             document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', handleTabClick));
+
+            loadState();
             updateAiDefaults();
         });
 
         // --- EVENT HANDLERS ---
-        function handleVisualize() {
+        function handleVisualize(activeTabOverride = null) {
             const inputData = slurmInput.value.trim();
             if (!inputData) {
                 showMessage("Please paste some Slurm output first.", "error");
@@ -361,7 +372,8 @@
                 renderAllTabs();
                 dashboardTabs.classList.remove('hidden');
                 const firstTab = parsedData.partitions.size > 0 ? 'partitions' : (parsedData.nodes.size > 0 ? 'nodes' : 'queue');
-                switchTab(firstTab);
+                switchTab(activeTabOverride || firstTab);
+                saveState();
             } catch (error) {
                 console.error("Error during visualization:", error);
                 showMessage(`Could not process input. Error: ${error.message}`, "error");
@@ -370,6 +382,7 @@
 
         function handleTabClick(event) {
             switchTab(event.target.dataset.tab);
+            saveState();
         }
 
         function handleCopyCommand() {
@@ -401,20 +414,37 @@
             visualizeBtn.click();
         }
 
+        function handleClearStorage() {
+            localStorage.removeItem('slurmDashboardState');
+            showMessage("Cleared saved data. Reloading...", "info");
+            setTimeout(() => window.location.reload(), 1500);
+        }
+
         function updateAiDefaults() {
             const provider = aiProviderSelector.value;
+            const isGemini = provider === 'gemini';
+
+            apiUrlInput.disabled = isGemini;
+
+            // Only set defaults if the user hasn't already provided a value
+            const currentModel = modelNameInput.value;
+            const currentUrl = apiUrlInput.value;
+
             switch (provider) {
                 case 'gemini':
-                    modelNameInput.value = 'gemini-2.5-flash';
-                    apiUrlInput.placeholder = 'Optional: for custom endpoints';
+                    if (!currentModel) modelNameInput.value = 'gemini-2.5-flash';
+                    apiUrlInput.value = '';
+                    apiUrlInput.placeholder = 'Not used for Gemini';
                     break;
                 case 'openai':
-                    modelNameInput.value = 'gpt-4o-mini';
-                    apiUrlInput.placeholder = 'Optional: e.g., https://api.openai.com/v1';
+                    if (!currentModel) modelNameInput.value = 'gpt-4o-mini';
+                    if (!currentUrl) apiUrlInput.value = 'https://api.openai.com/v1/chat/completions';
+                    apiUrlInput.placeholder = 'e.g., https://api.openai.com/v1/chat/completions';
                     break;
                 case 'groq':
-                    modelNameInput.value = 'meta-llama/llama-4-scout-17b-16e-instruct';
-                    apiUrlInput.placeholder = 'Optional: e.g., https://api.groq.com/openai/v1';
+                    if (!currentModel) modelNameInput.value = 'meta-llama/llama-4-scout-17b-16e-instruct';
+                    if (!currentUrl) apiUrlInput.value = 'https://api.groq.com/openai/v1/chat/completions';
+                    apiUrlInput.placeholder = 'e.g., https://api.groq.com/openai/v1/chat/completions';
                     break;
             }
         }
@@ -954,26 +984,21 @@
 
         async function callLLM(provider, apiKey, model, apiUrlOverride, prompt) {
             let apiUrl, payload, headers;
-            let finalModel = model;
 
             switch (provider) {
                 case 'gemini':
-                    apiUrl = apiUrlOverride || `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-                    if (!model) finalModel = 'gemini-1.5-flash';
-                    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${finalModel}:generateContent?key=${apiKey}`;
+                    apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
                     payload = { contents: [{ role: "user", parts: [{ text: prompt }] }] };
                     headers = { 'Content-Type': 'application/json' };
                     break;
                 case 'openai':
                     apiUrl = apiUrlOverride || 'https://api.openai.com/v1/chat/completions';
-                    if (!model) finalModel = 'gpt-4o';
-                    payload = { model: finalModel, messages: [{ role: "user", content: prompt }] };
+                    payload = { model: model, messages: [{ role: "user", content: prompt }] };
                     headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
                     break;
                 case 'groq':
                     apiUrl = apiUrlOverride || 'https://api.groq.com/openai/v1/chat/completions';
-                    if (!model) finalModel = 'llama3-8b-8192';
-                    payload = { model: finalModel, messages: [{ role: "user", content: prompt }] };
+                    payload = { model: model, messages: [{ role: "user", content: prompt }] };
                     headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` };
                     break;
                 default:
@@ -1069,6 +1094,38 @@
             messageBox.className = `fixed bottom-5 right-5 text-white py-3 px-5 rounded-lg shadow-xl ${type === 'error' ? 'bg-red-600' : 'bg-green-600'}`;
             messageBox.classList.remove('hidden');
             setTimeout(() => { messageBox.classList.add('hidden'); }, 4000);
+        }
+
+        function saveState() {
+            const state = {
+                slurmInput: slurmInput.value,
+                timezone: timezoneSelector.value,
+                aiProvider: aiProviderSelector.value,
+                apiKey: apiKeyInput.value,
+                modelName: modelNameInput.value,
+                apiUrl: apiUrlInput.value,
+                activeTab: document.querySelector('.tab-btn.active')?.dataset.tab || 'partitions'
+            };
+            localStorage.setItem('slurmDashboardState', JSON.stringify(state));
+        }
+
+        function loadState() {
+            const savedStateJSON = localStorage.getItem('slurmDashboardState');
+            if (savedStateJSON) {
+                const savedState = JSON.parse(savedStateJSON);
+                slurmInput.value = savedState.slurmInput || '';
+                timezoneSelector.value = savedState.timezone || 'local';
+                aiProviderSelector.value = savedState.aiProvider || 'gemini';
+                apiKeyInput.value = savedState.apiKey || '';
+                modelNameInput.value = savedState.modelName || '';
+                apiUrlInput.value = savedState.apiUrl || '';
+
+                updateAiDefaults();
+
+                if (slurmInput.value) {
+                    handleVisualize(savedState.activeTab);
+                }
+            }
         }
 
         function getAnonymizedExampleData() {
