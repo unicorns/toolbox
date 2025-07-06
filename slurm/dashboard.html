@@ -162,7 +162,9 @@
                             class="bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-md hover:bg-gray-700 transition duration-200">Copy</button>
                     </div>
                     <pre
-                        class="bg-gray-800 text-white p-3 rounded-md text-xs overflow-x-auto"><code id="slurm-commands">scontrol show partition --oneliner; echo "---"; scontrol show node --oneliner; echo "---"; squeue --all -o "%.18i %.9P %.30j %.8u %.8T %.10M %.10l %.6D %R"; echo "---"; scontrol show job --oneliner; echo "---"; date --iso-8601=seconds</code></pre>
+                        class="bg-gray-800 text-white p-3 rounded-md text-xs overflow-x-auto"><code id="slurm-commands">scontrol show partition --oneliner; echo "---"; scontrol show node --oneliner; echo "---"; squeue --all -o "%.18i %.9P %.30j %.8u %.8T %.10M %.10l %.6D %R"; echo "---"; scontrol show job --oneliner; echo "---"; sacct -a --starttime "now-1day" --parsable2 --format=JobID,JobName,User,Partition,State,Start,End,Elapsed,ReqMem,ReqCPUS,ReqTRES; echo "---"; date --iso-8601=seconds</code></pre>
+                    <p class="text-xs text-gray-500 mt-2">Note: `sacct` can be slow. The command above limits history to
+                        the last day (`--starttime "now-1day"`). Adjust as needed.</p>
                 </div>
 
                 <label for="slurm-input" class="block text-lg font-medium text-gray-700 mb-2">Paste Slurm Command
@@ -288,6 +290,9 @@
                         <button
                             class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300"
                             data-tab="queue">Job Queue</button>
+                        <button
+                            class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                            data-tab="history">History</button>
                     </nav>
                 </div>
 
@@ -308,6 +313,12 @@
                     <div id="queue-ai-container" class="mb-4"></div>
                     <div id="queue-output" class="bg-white p-4 rounded-lg shadow-md overflow-x-auto"></div>
                 </div>
+
+                <!-- History Tab -->
+                <div id="tab-history" class="tab-content">
+                    <div id="history-ai-container" class="mb-4"></div>
+                    <div id="history-output" class="bg-white p-4 rounded-lg shadow-md overflow-x-auto"></div>
+                </div>
             </div>
 
             <div id="message-box"
@@ -321,6 +332,7 @@
             partitions: new Map(),
             nodes: new Map(),
             queue: [],
+            history: [],
             clusterDate: null,
             detectedTimezone: null
         };
@@ -346,7 +358,7 @@
             copyCmdBtn.addEventListener('click', handleCopyCommand);
             loadExampleBtn.addEventListener('click', loadExampleData);
             clearStorageBtn.addEventListener('click', handleClearStorage);
-            timezoneSelector.addEventListener('change', () => { renderQueueTabBody(); saveState(); });
+            timezoneSelector.addEventListener('change', () => { renderQueueTabBody(); renderHistoryTabBody(); saveState(); });
             aiProviderSelector.addEventListener('change', () => { updateAiDefaults(); saveState(); });
             apiKeyInput.addEventListener('input', saveState);
             modelNameInput.addEventListener('input', saveState);
@@ -366,7 +378,7 @@
                 return;
             }
             try {
-                parsedData = { partitions: new Map(), nodes: new Map(), queue: [], clusterDate: null, detectedTimezone: null };
+                parsedData = { partitions: new Map(), nodes: new Map(), queue: [], history: [], clusterDate: null, detectedTimezone: null };
                 detectAndParseAll(inputData);
                 renderConfigurationPane();
                 renderAllTabs();
@@ -426,13 +438,12 @@
 
             apiUrlInput.disabled = isGemini;
 
-            // Only set defaults if the user hasn't already provided a value
             const currentModel = modelNameInput.value;
             const currentUrl = apiUrlInput.value;
 
             switch (provider) {
                 case 'gemini':
-                    if (!currentModel) modelNameInput.value = 'gemini-2.5-flash';
+                    if (!currentModel) modelNameInput.value = 'gemini-1.5-flash';
                     apiUrlInput.value = '';
                     apiUrlInput.placeholder = 'Not used for Gemini';
                     break;
@@ -442,7 +453,7 @@
                     apiUrlInput.placeholder = 'e.g., https://api.openai.com/v1/chat/completions';
                     break;
                 case 'groq':
-                    if (!currentModel) modelNameInput.value = 'meta-llama/llama-4-scout-17b-16e-instruct';
+                    if (!currentModel) modelNameInput.value = 'llama3-8b-8192';
                     if (!currentUrl) apiUrlInput.value = 'https://api.groq.com/openai/v1/chat/completions';
                     apiUrlInput.placeholder = 'e.g., https://api.groq.com/openai/v1/chat/completions';
                     break;
@@ -452,8 +463,9 @@
         // --- PARSING LOGIC ---
         function detectAndParseAll(rawData) {
             const lines = rawData.split('\n');
-            const partitionLines = [], nodeLines = [], squeueLines = [], jobDetailLines = [];
+            const partitionLines = [], nodeLines = [], squeueLines = [], jobDetailLines = [], sacctLines = [];
             let squeueHeaderDetected = false;
+            let sacctHeaderDetected = false;
             let dateLine = null;
 
             lines.forEach(line => {
@@ -470,8 +482,18 @@
                 else if (trimmedLine.startsWith('PartitionName=')) partitionLines.push(trimmedLine);
                 else if (trimmedLine.startsWith('NodeName=')) nodeLines.push(trimmedLine);
                 else if (trimmedLine.startsWith('JobId=')) jobDetailLines.push(trimmedLine);
-                else if (trimmedLine.startsWith('JOBID') && trimmedLine.includes('PARTITION')) squeueHeaderDetected = true;
-                else if (squeueHeaderDetected && trimmedLine) squeueLines.push(trimmedLine);
+                else if (trimmedLine.startsWith('JobID|JobName|')) { // sacct header
+                    sacctHeaderDetected = true;
+                }
+                else if (sacctHeaderDetected) {
+                    sacctLines.push(trimmedLine);
+                }
+                else if (trimmedLine.startsWith('JOBID') && trimmedLine.includes('PARTITION')) {
+                    squeueHeaderDetected = true;
+                }
+                else if (squeueHeaderDetected) {
+                    squeueLines.push(trimmedLine);
+                }
             });
 
             if (dateLine) parsedData.clusterDate = dateLine;
@@ -479,6 +501,7 @@
             jobDetailLines.forEach(parseScontrolJob);
             partitionLines.forEach(parseScontrolPartition);
             nodeLines.forEach(parseScontrolNode);
+            parseSacct(sacctLines);
         }
 
         function parseScontrolPartition(line) {
@@ -526,6 +549,30 @@
                     NodeList: details.NodeList, details: details
                 });
             }
+        }
+
+        function parseSacct(lines) {
+            const jobMap = new Map();
+            lines.forEach(line => {
+                const parts = line.split('|');
+                if (parts.length < 8) return;
+                const jobData = {
+                    JobID: parts[0], JobName: parts[1], User: parts[2], Partition: parts[3], State: parts[4],
+                    Start: parts[5], End: parts[6], Elapsed: parts[7], ReqMem: parts[8], ReqCPUS: parts[9], ReqTRES: parts[10]
+                };
+
+                const baseJobId = jobData.JobID.split('.')[0];
+                if (!jobMap.has(baseJobId)) {
+                    jobMap.set(baseJobId, { ...jobData, steps: [] });
+                } else if (!jobData.JobID.includes('.')) {
+                    Object.assign(jobMap.get(baseJobId), jobData);
+                }
+
+                if (jobData.JobID.includes('.')) {
+                    jobMap.get(baseJobId).steps.push(jobData);
+                }
+            });
+            parsedData.history = Array.from(jobMap.values());
         }
 
         function parseKeyValueString(str) {
@@ -623,6 +670,7 @@
             renderPartitionsTab();
             renderNodesTab();
             renderQueueTab();
+            renderHistoryTab();
         }
 
         function renderConfigurationPane() {
@@ -919,6 +967,158 @@
             });
         }
 
+        function renderHistoryTab() {
+            const container = document.getElementById('history-output');
+            const aiContainer = document.getElementById('history-ai-container');
+            container.innerHTML = '';
+            if (aiContainer) aiContainer.innerHTML = '';
+
+            if (parsedData.history.length === 0) {
+                container.innerHTML = `<p class="text-center text-gray-500">No history data found. Paste output from 'sacct'.</p>`;
+                return;
+            }
+
+            renderAiButton('history', '✨ Generate AI Summary of Job History', handleAiSummary);
+
+            container.innerHTML = `
+                <div class="mb-4">
+                    <input type="text" id="history-filter" class="w-full p-2 border border-gray-300 rounded-md" placeholder="Filter by Job ID, Name, or User...">
+                </div>
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-gray-50 text-xs text-gray-700 uppercase">
+                        <tr>
+                            <th class="px-2 py-3 w-4"></th>
+                            <th class="px-4 py-3">Job ID</th>
+                            <th class="px-4 py-3">Name</th>
+                            <th class="px-4 py-3">User</th>
+                            <th class="px-4 py-3">Partition</th>
+                            <th class="px-4 py-3">State</th>
+                            <th class="px-4 py-3">Start Time</th>
+                            <th class="px-4 py-3">End Time</th>
+                            <th class="px-4 py-3">Elapsed</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table-body"></tbody>
+                </table>
+            `;
+
+            document.getElementById('history-filter').addEventListener('keyup', renderHistoryTabBody);
+            renderHistoryTabBody();
+        }
+
+        function renderHistoryTabBody() {
+            const tableBody = document.getElementById('history-table-body');
+            if (!tableBody) return;
+            const filterText = document.getElementById('history-filter')?.value.toLowerCase() || '';
+
+            const filteredHistory = parsedData.history.filter(job => {
+                return job.JobID.toLowerCase().includes(filterText) ||
+                    job.JobName.toLowerCase().includes(filterText) ||
+                    job.User.toLowerCase().includes(filterText);
+            });
+
+            tableBody.innerHTML = '';
+            filteredHistory.forEach(job => {
+                const hasSteps = job.steps && job.steps.length > 0;
+                const row = document.createElement('tr');
+                row.className = `job-row border-b hover:bg-gray-50 ${hasSteps ? 'cursor-pointer' : ''}`;
+
+                const timezoneMode = timezoneSelector.value;
+                const relativeStartTime = getRelativeTimeString(job.Start, timezoneMode, 'ago');
+                const relativeEndTime = getRelativeTimeString(job.End, timezoneMode, 'ago');
+
+
+                row.innerHTML = `
+                    <td class="px-2 py-2 text-center">${hasSteps ? '<span class="arrow inline-block">▶</span>' : ''}</td>
+                    <td class="px-4 py-2 font-mono">${job.JobID}</td>
+                    <td class="px-4 py-2 font-mono">${job.JobName}</td>
+                    <td class="px-4 py-2">${job.User}</td>
+                    <td class="px-4 py-2">${job.Partition}</td>
+                    <td class="px-4 py-2"><span class="font-semibold ${getJobStateColor(job.State)}">${job.State}</span></td>
+                    <td class="px-4 py-2">${job.Start}<br><span class="text-xs text-gray-500">${relativeStartTime}</span></td>
+                    <td class="px-4 py-2">${job.End}<br><span class="text-xs text-gray-500">${relativeEndTime}</span></td>
+                    <td class="px-4 py-2">${job.Elapsed}</td>
+                `;
+                tableBody.appendChild(row);
+
+                if (hasSteps) {
+                    const detailsRow = document.createElement('tr');
+                    detailsRow.className = 'details-row hidden bg-gray-50';
+
+                    const stepsHtml = job.steps.map(step => `
+                        <tr class="text-xs text-gray-600">
+                            <td class="px-4 py-1 pl-12 font-mono">${step.JobID}</td>
+                            <td class="px-4 py-1 font-mono">${step.JobName}</td>
+                            <td class="px-4 py-1">${step.User}</td>
+                            <td class="px-4 py-1">${step.Partition}</td>
+                            <td class="px-4 py-1"><span class="font-semibold ${getJobStateColor(step.State || '')}">${step.State}</span></td>
+                            <td class="px-4 py-1" colspan="4">${step.Elapsed}</td>
+                        </tr>
+                    `).join('');
+
+                    let reqGresHtml = '';
+                    const reqTres = parseTRES(job.ReqTRES || '');
+                    for (const [key, val] of Object.entries(reqTres.gres)) {
+                        reqGresHtml += `<span class="ml-4"><strong class="font-semibold">GRES/${key.toUpperCase()}:</strong> ${val}</span>`;
+                    }
+
+                    let reqMem = job.ReqMem;
+                    if (reqMem.endsWith('c')) {
+                        const memVal = parseFloat(reqMem);
+                        const cpuVal = parseInt(job.ReqCPUS);
+                        if (!isNaN(memVal) && !isNaN(cpuVal)) {
+                            const totalMem = memVal * cpuVal;
+                            const unit = reqMem.replace(/[0-9.c]/g, '');
+                            reqMem = `${totalMem}${unit}`;
+                        }
+                    }
+                    reqMem = reqMem.replace(/[nc]$/i, '');
+
+
+                    detailsRow.innerHTML = `
+                        <td colspan="9" class="p-4">
+                            <div class="mb-2">
+                                <h4 class="font-bold">Requested Resources:</h4>
+                                <div class="flex space-x-6 text-sm">
+                                    <span><strong class="font-semibold">CPU:</strong> ${job.ReqCPUS}</span>
+                                    <span><strong class="font-semibold">Memory:</strong> ${reqMem}</span>
+                                    ${reqGresHtml}
+                                </div>
+                            </div>
+                            ${job.steps.length > 0 ? `
+                            <h4 class="font-bold mt-4 mb-2">Job Steps:</h4>
+                            <table class="w-full text-left">
+                                <thead class="text-xs text-gray-500">
+                                    <tr>
+                                        <th class="px-4 py-1 pl-12">Step ID</th>
+                                        <th class="px-4 py-1">Name</th>
+                                        <th class="px-4 py-1">User</th>
+                                        <th class="px-4 py-1">Partition</th>
+                                        <th class="px-4 py-1">State</th>
+                                        <th class="px-4 py-1" colspan="4">Elapsed</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${stepsHtml}</tbody>
+                            </table>
+                            ` : ''}
+                        </td>
+                    `;
+                    tableBody.appendChild(detailsRow);
+                }
+            });
+
+            tableBody.addEventListener('click', (event) => {
+                const row = event.target.closest('.job-row');
+                if (row && row.classList.contains('cursor-pointer')) {
+                    const detailsRow = row.nextElementSibling;
+                    if (detailsRow && detailsRow.classList.contains('details-row')) {
+                        row.classList.toggle('open');
+                        detailsRow.classList.toggle('hidden');
+                    }
+                }
+            });
+        }
+
         function renderAiButton(tab, text, handler) {
             const containerId = `${tab}-ai-container`;
             const container = document.getElementById(containerId);
@@ -968,6 +1168,10 @@
                 case 'queue':
                     contextData = JSON.stringify(parsedData.queue);
                     prompt = `You are an expert HPC administrator. Based on this squeue output, summarize the current job queue. Highlight the number of running vs. pending jobs, identify any users with many jobs, and point out any jobs that have been pending for a long time. Present in clear markdown. Data: ${contextData}`;
+                    break;
+                case 'history':
+                    contextData = JSON.stringify(parsedData.history);
+                    prompt = `You are an expert HPC administrator. Based on this sacct output, summarize the job history. Identify common failure states, users with the most jobs, and any other notable patterns or trends. Present in clear markdown. Data: ${contextData}`;
                     break;
             }
 
@@ -1084,8 +1288,11 @@
         }
 
         function getJobStateColor(state) {
+            state = state.split(' ')[0]; // Get base state like "COMPLETED" from "COMPLETED by user"
             if (state === 'RUNNING' || state === 'R') return 'text-green-600';
             if (state === 'PENDING' || state === 'PD') return 'text-yellow-600';
+            if (state === 'COMPLETED') return 'text-blue-600';
+            if (state === 'FAILED' || state === 'TIMEOUT' || state.includes('CANCELLED')) return 'text-red-600';
             return 'text-gray-600';
         }
 
@@ -1152,6 +1359,12 @@ JobId=1336183 JobName=interactive UserId=admin(1000) GroupId=admin-group(2000) J
 JobId=1336180 JobName=jupyter-notebook UserId=user1(1001) GroupId=project-alpha(2001) JobState=RUNNING StartTime=2025-07-04T19:23:59 EndTime=2025-07-04T23:23:59 NodeList=node-b1 TRES=cpu=16,mem=64G,node=1,billing=16,gres/gpu=1
 JobId=1336166 JobName=interactive UserId=user2(1002) GroupId=project-beta(2002) JobState=RUNNING StartTime=2025-07-04T18:22:57 EndTime=2025-07-04T21:22:57 NodeList=node-b1 TRES=cpu=16,mem=128G,node=1,billing=16,gres/gpu=1,gres/gpu:v100=2
 JobId=1336162 JobName=data_proc_2 UserId=user2(1002) GroupId=project-beta(2002) JobState=PENDING StartTime=Unknown EndTime=Unknown NodeList=(null) ReqTRES=cpu=16,mem=64G,node=1,billing=16
+---
+JobID|JobName|User|Partition|State|Start|End|Elapsed|ReqMem|ReqCPUS|ReqTRES
+1336135|grounding|user1|gpu-high|COMPLETED|2025-07-04T15:29:40|2025-07-04T21:07:32|05:37:52|32000Mc|2|gpu:1
+1336136|grounding|user1|gpu-high|FAILED|2025-07-04T15:29:40|2025-07-04T21:06:48|05:37:08|32000Mc|2|gpu:1
+1336196|robo|user2|gpu-high|CANCELLED by 1002|2025-07-04T21:02:37|2025-07-04T21:06:42|00:04:05|16000Mc|8|gpu:mligpu:1
+1336197|robo|user2|gpu-high|OUT_OF_MEMORY|2025-07-04T21:07:00|2025-07-04T21:07:37|00:00:37|32000Mc|16|gpu:mligpu:1
 ---
 2025-07-04T21:22:47-07:00`;
         }
