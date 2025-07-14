@@ -59,11 +59,6 @@ jobs:
             echo "Copying static project: $project"
             mkdir -p "_site/$project"
             cp -r "$project"/* "_site/$project/"
-            
-            # Rename dashboard.html to index.html if needed
-            if [ -f "_site/$project/dashboard.html" ] && [ ! -f "_site/$project/index.html" ]; then
-              mv "_site/$project/dashboard.html" "_site/$project/index.html"
-            fi
           done
       
       - name: Upload artifact
