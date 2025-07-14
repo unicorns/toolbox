@@ -520,8 +520,8 @@ const GresResourceDisplay = ({ details }: { details: Record<string, string> }) =
 
                 if (hasGeneric && subtypes.length > 0) {
                     // Hierarchical Display
-                    const total = parseInt(cfgTRES.gres[genericKey] || '0');
-                    const allocated = parseInt(allocTRES.gres[genericKey] || '0');
+                    const total = parseInt(cfgTRES.gres[genericKey] ?? '0');
+                    const allocated = parseInt(allocTRES.gres[genericKey] ?? '0');
                     const pct = total > 0 ? (allocated / total * 100) : 0;
                     const color = baseType.includes('gpu') ? 'bg-purple-600' : 'bg-teal-500';
 
@@ -541,8 +541,11 @@ const GresResourceDisplay = ({ details }: { details: Record<string, string> }) =
                             <div className="ml-4 mt-2 pl-4 border-l-2 border-gray-200 space-y-2">
                                 {(subtypes as string[]).map((keyStr) => {
                                     const kStr = String(keyStr);
-                                    const subTotal = parseInt(String(configuredGres[kStr]) || String(cfgTRES.gres[kStr]) || '0');
-                                    const subAlloc = parseInt(String(allocTRES.gres[kStr]) || '0');
+                                    const subTotalStr = String(cfgTRES.gres[kStr] ?? configuredGres[kStr] ?? '0');
+                                    const subTotal = parseUnitValue(subTotalStr);
+                                    const subAllocStr = String(allocTRES.gres[kStr] ?? '0');
+                                    const subAlloc = parseUnitValue(subAllocStr);
+
                                     if (subTotal === 0 && subAlloc === 0) return null;
                                     const subPct = subTotal > 0 ? (subAlloc / subTotal * 100) : 0;
                                     return (
@@ -559,14 +562,17 @@ const GresResourceDisplay = ({ details }: { details: Record<string, string> }) =
                     // Flat Display
                     return keysStr.sort().map((keyStr) => {
                         const kStr = String(keyStr);
-                        const total = parseInt(String(configuredGres[kStr]) || String(cfgTRES.gres[kStr]) || '0');
-                        const allocated = parseInt(String(allocTRES.gres[kStr]) || '0');
+                        const totalStr = String(cfgTRES.gres[kStr] ?? configuredGres[kStr] ?? '0');
+                        const total = parseUnitValue(totalStr);
+                        const allocatedStr = String(allocTRES.gres[kStr] ?? '0');
+                        const allocated = parseUnitValue(allocatedStr);
+
                         if (total === 0 && allocated === 0) return null;
                         const pct = total > 0 ? (allocated / total * 100) : 0;
                         const color = kStr.includes('gpu') ? 'bg-purple-600' : 'bg-teal-500';
                         return (
                             <div key={kStr}>
-                                <span className="text-sm font-medium">GRES/{kStr.toUpperCase()}: {allocated}/{total} ({pct.toFixed(1)}%)</span>
+                                <span className="text-sm font-medium">GRES/{kStr.toUpperCase()}: {allocated.toLocaleString()}/{total.toLocaleString()} ({pct.toFixed(1)}%)</span>
                                 <ProgressBar value={pct} color={color} />
                             </div>
                         );
