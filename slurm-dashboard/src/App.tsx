@@ -904,7 +904,7 @@ const HistoryTab = ({ history, timezoneMode, detectedTimezone }: { history: any[
 
 function App() {
     const [slurmData, setSlurmData] = useState<SlurmData | null>(null);
-    const [activeTab, setActiveTab] = useState('partitions');
+    const [activeTab, setActiveTab] = useState('nodes');
     const [message, setMessage] = useState('');
     const [messageType, setMessageType] = useState('info');
     const [timezone, setTimezone] = useState('auto');
@@ -918,11 +918,18 @@ function App() {
         try {
             const parsed = detectAndParseAll(text);
             setSlurmData(parsed);
-            if (parsed.partitions.size > 0) setActiveTab('partitions');
-            else if (parsed.nodes.size > 0) setActiveTab('nodes');
-            else if (parsed.queue.length > 0) setActiveTab('queue');
-            else if (parsed.history.length > 0) setActiveTab('history');
-            else setActiveTab('partitions');
+
+            if (parsed.nodes.size > 0) {
+                setActiveTab('nodes');
+            } else if (parsed.partitions.size > 0) {
+                setActiveTab('partitions');
+            } else if (parsed.queue.length > 0) {
+                setActiveTab('queue');
+            } else if (parsed.history.length > 0) {
+                setActiveTab('history');
+            } else {
+                setActiveTab('nodes');
+            }
 
             if (!parsed.detectedTimezone) {
                 setTimezone('local');
