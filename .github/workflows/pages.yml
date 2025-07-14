@@ -48,6 +48,7 @@ jobs:
             echo "Building Node.js project: $project"
             cd "$project"
             npm ci
+            npm run test
             npm run build
             mkdir -p "../_site/$project"
             cp -r dist/* "../_site/$project/"

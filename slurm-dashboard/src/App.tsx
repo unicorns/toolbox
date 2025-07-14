@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import type { SlurmData, SlurmQueueItem, SlurmHistoryItem, JobRowProps } from './types';
 
 // --- CONSTANTS & CONFIGURATION ---
 const SLURM_COMMAND = `scontrol show partition --oneliner; echo "---"; scontrol show node --oneliner; echo "---"; squeue --all -o "%.18i %.9P %.30j %.8u %.8T %.10M %.10l %.6D %R"; echo "---"; scontrol show job --oneliner; echo "---"; sacct -a --starttime "now-1day" --parsable2 --format=JobID,JobName,User,Partition,State,Start,End,Elapsed,ReqMem,ReqCPUS,ReqTRES; echo "---"; date --iso-8601=seconds`;
 
-const ANONYMIZED_EXAMPLE_DATA = `PartitionName=gpu-high AllowGroups=ALL AllowAccounts=project-alpha AllowQos=ALL AllocNodes=ALL Default=NO QoS=gpu_qos DefaultTime=NONE DisableRootJobs=NO ExclusiveUser=NO GraceTime=0 Hidden=NO MaxNodes=UNLIMITED MaxTime=7-00:00:00 MinNodes=0 LLN=NO MaxCPUsPerNode=UNLIMITED Nodes=node-a1,node-b[1-2] PriorityJobFactor=1 PriorityTier=100 RootOnly=NO ReqResv=NO OverSubscribe=FORCE:1 OverTimeLimit=NONE PreemptMode=REQUEUE State=UP TotalCPUs=128 TotalNodes=3 SelectTypeParameters=NONE JobDefaults=(null) DefMemPerNode=UNLIMITED MaxMemPerNode=UNLIMITED
+export const ANONYMIZED_EXAMPLE_DATA = `PartitionName=gpu-high AllowGroups=ALL AllowAccounts=project-alpha AllowQos=ALL AllocNodes=ALL Default=NO QoS=gpu_qos DefaultTime=NONE DisableRootJobs=NO ExclusiveUser=NO GraceTime=0 Hidden=NO MaxNodes=UNLIMITED MaxTime=7-00:00:00 MinNodes=0 LLN=NO MaxCPUsPerNode=UNLIMITED Nodes=node-a1,node-b[1-2] PriorityJobFactor=1 PriorityTier=100 RootOnly=NO ReqResv=NO OverSubscribe=FORCE:1 OverTimeLimit=NONE PreemptMode=REQUEUE State=UP TotalCPUs=128 TotalNodes=3 SelectTypeParameters=NONE JobDefaults=(null) DefMemPerNode=UNLIMITED MaxMemPerNode=UNLIMITED
 PartitionName=cpu-low AllowGroups=ALL AllowAccounts=ALL AllowQos=ALL AllocNodes=ALL Default=YES QoS=N/A DefaultTime=00:30:00 DisableRootJobs=NO ExclusiveUser=NO ExclusiveTopo=NO GraceTime=0 Hidden=NO MaxNodes=UNLIMITED MaxTime=1-00:00:00 MinNodes=0 LLN=NO MaxCPUsPerNode=UNLIMITED MaxCPUsPerSocket=UNLIMITED Nodes=node-c[1-2] PriorityJobFactor=1 PriorityTier=1 RootOnly=NO ReqResv=NO OverSubscribe=NO OverTimeLimit=NONE PreemptMode=OFF State=UP TotalCPUs=64 TotalNodes=2 SelectTypeParameters=NONE JobDefaults=(null) DefMemPerNode=UNLIMITED MaxMemPerNode=UNLIMITED TRES=cpu=64,mem=256000M,node=2,billing=64
 ---
 NodeName=node-a1 Arch=x86_64 CoresPerSocket=1 CPUAlloc=8 CPUTot=32 CPULoad=8.60 Gres=gpu:a100:4 NodeAddr=node-a1.cluster.local NodeHostName=node-a1 Version=23.02.7 OS=Linux 5.15.0-107-generic RealMemory=256000 AllocMem=128000 FreeMem=120000 State=MIXED Partitions=gpu-high BootTime=2025-06-13T12:51:10 SlurmdStartTime=2025-06-13T12:51:56 CfgTRES=cpu=32,mem=256000M,billing=32,gres/gpu=4,gres/gpu:a100=4 AllocTRES=cpu=8,mem=128G,gres/gpu=2,gres/gpu:a100=2
@@ -38,7 +39,7 @@ JobID|JobName|User|Partition|State|Start|End|Elapsed|ReqMem|ReqCPUS|ReqTRES
 
 
 // --- PARSING & UTILITY FUNCTIONS ---
-const parseKeyValueString = (str: string): Record<string, string> => {
+export const parseKeyValueString = (str: string): Record<string, string> => {
     const data: Record<string, string> = {};
     str.split(' ').forEach((pair: string) => {
         const [key, ...valueParts] = pair.split('=');
@@ -47,16 +48,16 @@ const parseKeyValueString = (str: string): Record<string, string> => {
     return data;
 };
 
-const expandNodeList = (nodesStr: string): string[] => {
+export const expandNodeList = (nodesStr: string): string[] => {
     if (!nodesStr || nodesStr === '(null)') return [];
     const finalNodes = new Set<string>();
-    const nodeTokens = nodesStr.match(/[^,\[]+\[[^\]]+\]|[^,]+/g) || [];
+    const nodeTokens = nodesStr.match(/[^,[]+\[[^\]]+\]|[^,]+/g) ?? [];
     nodeTokens.forEach((token: string) => {
-        const match = token.match(/^([^[]+)\[([^\]]+)\](.*)$/);
+        const match = /^([^[]+)\[([^\]]+)\](.*)$/.exec(token);
         if (match) {
-            const prefix = match[1], rangeStr = match[2], suffix = match[3] || '';
+            const prefix = match[1], rangeStr = match[2], suffix = match[3] ?? '';
             rangeStr.split(',').forEach((item: string) => {
-                const rangeMatch = item.match(/^(\d+)-(\d+)$/);
+                const rangeMatch = /^(\d+)-(\d+)$/.exec(item);
                 if (rangeMatch) {
                     const start = parseInt(rangeMatch[1]), end = parseInt(rangeMatch[2]), padding = rangeMatch[1].length;
                     for (let i = start; i <= end; i++) finalNodes.add(`${prefix}${String(i).padStart(padding, '0')}${suffix}`);
@@ -88,7 +89,7 @@ const parseUnitValue = (valueString: string): number => {
     if (!valueString || typeof valueString !== 'string') return 0;
     const value = parseFloat(valueString);
     if (isNaN(value)) return 0;
-    const unit = valueString.match(/[KMG]$/i);
+    const unit = /[KMG]$/i.exec(valueString);
     if (!unit) return value;
     switch (unit[0].toUpperCase()) {
         case 'K': return value * 1000;
@@ -112,7 +113,7 @@ const parseGresField = (gresString: string): Record<string, number> => {
     return gresMap;
 };
 
-const parseTRES = (tresString: string): { cpu: string; mem: string; gres: Record<string, string> } => {
+export const parseTRES = (tresString: string): { cpu: string; mem: string; gres: Record<string, string> } => {
     const resources: { cpu: string; mem: string; gres: Record<string, string> } = { cpu: '0', mem: 'N/A', gres: {} };
     if (!tresString) return resources;
     tresString.split(',').forEach((res: string) => {
@@ -152,7 +153,7 @@ const getRelativeTimeString = (
     }
 
     let dateString = timeString;
-    const hasOffset = timeString.endsWith('Z') || timeString.match(/[-+]\d{2}:\d{2}$/);
+    const hasOffset = timeString.endsWith('Z') || (/[-+]\d{2}:\d{2}$/.exec(timeString));
 
     if (!hasOffset) {
         if (timeZoneMode === 'utc' || (timeZoneMode === 'auto' && detectedTimezone === 'Z')) {
@@ -174,16 +175,8 @@ const getRelativeTimeString = (
     }
 };
 
-interface SlurmData {
-    partitions: Map<string, { nodes: Set<string>; details: Record<string, string> }>;
-    nodes: Map<string, { details: Record<string, string> }>;
-    queue: any[];
-    history: any[];
-    clusterDate: string | null;
-    detectedTimezone: string | null;
-}
 
-const detectAndParseAll = (rawData: string): SlurmData => {
+export const detectAndParseAll = (rawData: string): SlurmData => {
     const lines = rawData.split('\n');
     const partitionLines: string[] = [], nodeLines: string[] = [], squeueLines: string[] = [], jobDetailLines: string[] = [], sacctLines: string[] = [];
     let squeueHeaderDetected = false, sacctHeaderDetected = false, dateLine: string | null = null, detectedTimezone: string | null = null;
@@ -191,7 +184,7 @@ const detectAndParseAll = (rawData: string): SlurmData => {
     lines.forEach((line: string) => {
         const trimmedLine = line.trim();
         const isoDateRegex = /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})([-+]\d{2}:\d{2}|Z)/;
-        const match = trimmedLine.match(isoDateRegex);
+        const match = isoDateRegex.exec(trimmedLine);
 
         if (trimmedLine.startsWith('---') || trimmedLine === '') return;
 
@@ -213,7 +206,7 @@ const detectAndParseAll = (rawData: string): SlurmData => {
         const details = parseKeyValueString(line);
         if (details.PartitionName) {
             partitions.set(details.PartitionName, {
-                nodes: new Set(expandNodeList(details.Nodes || '')),
+                nodes: new Set(expandNodeList(details.Nodes ?? '')),
                 details: details
             });
         }
@@ -225,7 +218,7 @@ const detectAndParseAll = (rawData: string): SlurmData => {
         if (details.NodeName) nodes.set(details.NodeName, { details });
     });
 
-    let queue: any[] = [];
+    const queue: SlurmQueueItem[] = [];
     squeueLines.forEach((line: string) => {
         const parts = line.trim().split(/\s+/);
         if (parts.length >= 8) {
@@ -240,19 +233,26 @@ const detectAndParseAll = (rawData: string): SlurmData => {
         const details = parseKeyValueString(line);
         const jobId = details.JobId;
         if (!jobId) return;
-        const jobIndex = queue.findIndex((j: any) => j.JobId === jobId);
+        const jobIndex = queue.findIndex((j) => j.JobId === jobId);
         if (jobIndex !== -1) {
             queue[jobIndex] = { ...queue[jobIndex], ...details, details: details };
         } else {
             queue.push({
-                JobId: details.JobId, Partition: details.Partition, Name: details.JobName,
-                User: (details.UserId || '').split('(')[0], State: details.JobState, Time: details.RunTime,
-                NodeList: details.NodeList, details: details
+                JobId: details.JobId ?? '', 
+                Partition: details.Partition ?? '', 
+                Name: details.JobName ?? '',
+                User: (details.UserId ?? '').split('(')[0], 
+                State: details.JobState ?? '', 
+                Time: details.RunTime ?? '',
+                TimeLimit: details.TimeLimit ?? '',
+                Nodes: details.NodeList ?? '',
+                NodeList: details.NodeList ?? '',
+                details: details
             });
         }
     });
 
-    const jobMap = new Map<string, any>();
+    const jobMap = new Map<string, SlurmHistoryItem>();
     sacctLines.forEach((line: string) => {
         if (!line) return;
         const parts = line.split('|');
@@ -265,10 +265,14 @@ const detectAndParseAll = (rawData: string): SlurmData => {
         if (!jobMap.has(baseJobId)) {
             jobMap.set(baseJobId, { ...jobData, steps: [] });
         } else if (!jobData.JobID.includes('.')) {
-            Object.assign(jobMap.get(baseJobId), jobData);
+            const existingJob = jobMap.get(baseJobId);
+            if (existingJob) {
+                Object.assign(existingJob, jobData);
+            }
         }
         if (jobData.JobID.includes('.')) {
-            jobMap.get(baseJobId).steps.push(jobData);
+            const existingJob = jobMap.get(baseJobId);
+            existingJob?.steps?.push(jobData);
         }
     });
 
@@ -286,12 +290,14 @@ const detectAndParseAll = (rawData: string): SlurmData => {
 // --- HELPER & UI COMPONENTS ---
 
 const MessageBox = ({ message, type, onDismiss }: { message: string; type: string; onDismiss: () => void }) => {
-    if (!message) return null;
-
     useEffect(() => {
-        const timer = setTimeout(onDismiss, 4000);
-        return () => clearTimeout(timer);
+        if (message) {
+            const timer = setTimeout(onDismiss, 4000);
+            return () => clearTimeout(timer);
+        }
     }, [message, onDismiss]);
+
+    if (!message) return null;
 
     const color = type === 'error' ? 'bg-red-600' : 'bg-green-600';
     return (
@@ -312,7 +318,7 @@ const CommandBlock = ({ onCopy, copyText }: { onCopy: () => void; copyText: stri
     <div className="bg-gray-100 p-4 rounded-lg mb-6">
         <div className="flex justify-between items-center mb-2">
             <label className="block text-sm font-bold text-gray-700">Recommended All-in-One Command</label>
-            <button onClick={onCopy} className="bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-md hover:bg-gray-700 transition duration-200 w-16 text-center">
+            <button type="button" onClick={onCopy} className="bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-md hover:bg-gray-700 transition duration-200 w-16 text-center">
                 {copyText}
             </button>
         </div>
@@ -348,7 +354,7 @@ const InputSection = ({ onAnalyze, showMessage }: { onAnalyze: (text: string) =>
         try {
             document.execCommand('copy');
             setCopyText('Copied!');
-        } catch (err) {
+        } catch {
             setCopyText('Failed!');
             showMessage('Failed to copy command.', 'error');
         }
@@ -378,10 +384,10 @@ const InputSection = ({ onAnalyze, showMessage }: { onAnalyze: (text: string) =>
                 onKeyDown={handleKeyDown}
             />
             <div className="mt-4 flex flex-col sm:flex-row gap-2">
-                <button onClick={handleAnalyzeClick} className="w-full sm:w-1/2 bg-indigo-600 text-white font-bold py-3 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-300">
+                <button type="button" onClick={handleAnalyzeClick} className="w-full sm:w-1/2 bg-indigo-600 text-white font-bold py-3 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-300">
                     Analyze Cluster Data
                 </button>
-                <button onClick={handleExampleClick} className="w-full sm:w-1/2 bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition duration-300">
+                <button type="button" onClick={handleExampleClick} className="w-full sm:w-1/2 bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition duration-300">
                     Load Example Data
                 </button>
             </div>
@@ -457,6 +463,7 @@ const ConfigurationPane = ({ timezone, setTimezone, detectedTimezone, clusterDat
 
 const TabButton = ({ tabId, activeTab, onClick, children }: { tabId: string; activeTab: string; onClick: (id: string) => void; children: React.ReactNode }) => (
     <button
+        type="button"
         className={`tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === tabId ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
         onClick={() => onClick(tabId)}
     >
@@ -467,11 +474,11 @@ const TabButton = ({ tabId, activeTab, onClick, children }: { tabId: string; act
 const PartitionsTab = ({ partitions }: { partitions: Map<string, { nodes: Set<string>; details: Record<string, string> }> }) => {
     if (partitions.size === 0) return <p className="text-center text-gray-500">No partition data found.</p>;
 
-    const sortedPartitions = Array.from(partitions.entries()).sort((a: [string, any], b: [string, any]) => a[0].localeCompare(b[0]));
+    const sortedPartitions = Array.from(partitions.entries()).sort((a, b) => a[0].localeCompare(b[0]));
 
     return (
         <div className="space-y-6">
-            {sortedPartitions.map(([name, { details, nodes }]: [string, { details: Record<string, string>; nodes: Set<string> }]) => (
+            {sortedPartitions.map(([name, { details, nodes }]) => (
                 <div key={name} className="bg-white p-6 rounded-lg shadow-md">
                     <div className="flex items-center border-b pb-3 mb-4">
                         <h2 className="text-xl font-bold text-gray-800">{name}</h2>
@@ -515,14 +522,14 @@ const Tooltip = ({ text, children }: { text: string; children: React.ReactNode }
 );
 
 const GresResourceDisplay = ({ details }: { details: Record<string, string> }) => {
-    const cfgTRES = parseTRES(details.CfgTRES || '');
-    const allocTRES = parseTRES(details.AllocTRES || '');
+    const cfgTRES = parseTRES(details.CfgTRES ?? '');
+    const allocTRES = parseTRES(details.AllocTRES ?? '');
     const configuredGres = parseGresField(details.Gres);
 
     const allGresKeys = new Set<string>([...Object.keys(cfgTRES.gres), ...Object.keys(allocTRES.gres), ...Object.keys(configuredGres)].map(k => String(k)));
     if (allGresKeys.size === 0) return null;
 
-    const gresGroups: Map<string, string[]> = new Map();
+    const gresGroups = new Map<string, string[]>();
     Array.from(allGresKeys).forEach((key) => {
         if (typeof key !== 'string') return;
         const baseType = key.split(':')[0];
@@ -534,10 +541,10 @@ const GresResourceDisplay = ({ details }: { details: Record<string, string> }) =
 
     return (
         <div className="space-y-3">
-            {(Array.from(gresGroups.entries()) as [string, string[]][]).map(([baseType, keys]) => {
+            {(Array.from(gresGroups.entries())).map(([baseType, keys]) => {
                 const genericKey = baseType;
-                let keysStr: string[] = (keys as (string | number)[]).filter((k): k is string => typeof k === 'string');
-                let subtypes: string[] = keysStr.filter((k) => typeof k === 'string' && k !== genericKey).sort();
+                const keysStr: string[] = (keys as (string | number)[]).filter((k): k is string => typeof k === 'string');
+                const subtypes: string[] = keysStr.filter((k) => typeof k === 'string' && k !== genericKey).sort();
                 const hasGeneric = keysStr.includes(genericKey);
 
                 if (hasGeneric && subtypes.length > 0) {
@@ -561,7 +568,7 @@ const GresResourceDisplay = ({ details }: { details: Record<string, string> }) =
                             </div>
                             <ProgressBar value={pct} color={color} />
                             <div className="ml-4 mt-2 pl-4 border-l-2 border-gray-200 space-y-2">
-                                {(subtypes as string[]).map((keyStr) => {
+                                {(subtypes).map((keyStr) => {
                                     const kStr = String(keyStr);
                                     const subTotalStr = String(cfgTRES.gres[kStr] ?? configuredGres[kStr] ?? '0');
                                     const subTotal = parseUnitValue(subTotalStr);
@@ -605,9 +612,9 @@ const GresResourceDisplay = ({ details }: { details: Record<string, string> }) =
     );
 };
 
-const NodeCard = ({ name, details, jobs }: { name: string; details: Record<string, string>; jobs: any[] }) => {
-    const cfgTRES = parseTRES(details.CfgTRES || '');
-    const allocTRES = parseTRES(details.AllocTRES || '');
+const NodeCard = ({ name, details, jobs }: { name: string; details: Record<string, string>; jobs: SlurmQueueItem[] }) => {
+    const cfgTRES = parseTRES(details.CfgTRES ?? '');
+    const allocTRES = parseTRES(details.AllocTRES ?? '');
 
     const cpuTot = parseInt(cfgTRES.cpu || details.CPUTot || '0');
     const cpuAlloc = parseInt(allocTRES.cpu || details.CPUAlloc || '0');
@@ -628,7 +635,7 @@ const NodeCard = ({ name, details, jobs }: { name: string; details: Record<strin
         stateColor = 'bg-green-100 text-green-800';
     }
 
-    const activePartitions = new Set(jobs.map((j: any) => j.Partition));
+    const activePartitions = new Set(jobs.map((j) => j.Partition));
 
     return (
         <div className="bg-white p-4 rounded-lg shadow-md flex flex-col space-y-3">
@@ -648,7 +655,7 @@ const NodeCard = ({ name, details, jobs }: { name: string; details: Record<strin
             <div className="pt-2 border-t border-gray-200 mt-2">
                 <h4 className="text-xs font-bold text-gray-500 mb-1 uppercase">Partitions</h4>
                 <div className="flex flex-wrap">
-                    {(details.Partitions || '').split(',').map((p: string) => (
+                    {(details.Partitions ?? '').split(',').map((p: string) => (
                         <span key={p} className={`inline-block ${activePartitions.has(p) ? 'bg-indigo-600 text-white font-semibold' : 'bg-gray-200 text-gray-700'} text-xs mr-1 mb-1 px-2 py-0.5 rounded-full`}>{p}</span>
                     ))}
                 </div>
@@ -657,9 +664,9 @@ const NodeCard = ({ name, details, jobs }: { name: string; details: Record<strin
                 <div className="pt-2 border-t border-gray-200 mt-2">
                     <h4 className="text-xs font-bold text-gray-500 mb-2 uppercase">Active Jobs</h4>
                     <div className="space-y-1">
-                        {jobs.map((job: any) => {
+                        {jobs.map((job) => {
                             const tresString = job.details?.AllocTRES && job.details.AllocTRES !== '(null)' ? job.details.AllocTRES : job.details?.TRES;
-                            const tres = parseTRES(tresString);
+                            const tres = parseTRES(tresString ?? '');
                             return (
                                 <div key={job.JobId} className="text-xs p-2 bg-gray-50 rounded">
                                     <div>
@@ -684,14 +691,15 @@ const NodeCard = ({ name, details, jobs }: { name: string; details: Record<strin
     );
 };
 
-const NodesTab = ({ nodes, queue }: { nodes: Map<string, { details: Record<string, string> }>; queue: any[] }) => {
+const NodesTab = ({ nodes, queue }: { nodes: Map<string, { details: Record<string, string> }>; queue: SlurmQueueItem[] }) => {
     const nodeToJobsMap = useMemo(() => {
-        const map = new Map();
+        const map = new Map<string, SlurmQueueItem[]>();
         nodes.forEach((_, name) => map.set(name, []));
         queue.filter(j => j.State === 'RUNNING' || j.State === 'R').forEach(job => {
-            expandNodeList(job.NodeList || (job.details && job.details.NodeList) || '').forEach(nodeName => {
-                if (map.has(nodeName)) {
-                    map.get(nodeName).push(job);
+            expandNodeList(job.NodeList ?? '').forEach(nodeName => {
+                const nodeJobs = map.get(nodeName);
+                if (nodeJobs) {
+                    nodeJobs.push(job);
                 }
             });
         });
@@ -700,12 +708,12 @@ const NodesTab = ({ nodes, queue }: { nodes: Map<string, { details: Record<strin
 
     if (nodes.size === 0) return <p className="text-center text-gray-500 col-span-full">No node data found.</p>;
 
-    const sortedNodes = Array.from(nodes.entries()).sort((a: [string, any], b: [string, any]) => a[0].localeCompare(b[0]));
+    const sortedNodes = Array.from(nodes.entries()).sort((a, b) => a[0].localeCompare(b[0]));
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {sortedNodes.map(([name, { details }]: [string, { details: Record<string, string> }]) => (
-                <NodeCard key={name} name={name} details={details} jobs={nodeToJobsMap.get(name) || []} />
+            {sortedNodes.map(([name, { details }]) => (
+                <NodeCard key={name} name={name} details={details} jobs={nodeToJobsMap.get(name) ?? []} />
             ))}
         </div>
     );
@@ -728,12 +736,13 @@ const TresDetails = ({ tresString, title }: { tresString: string; title: string 
     );
 };
 
-const JobDetails = ({ job, isHistory }: { job: any; isHistory: boolean }) => {
+const JobDetails = ({ job, isHistory }: { job: SlurmQueueItem | SlurmHistoryItem; isHistory: boolean }) => {
     if (isHistory) {
-        let reqMem = job.ReqMem || '';
+        const historyJob = job as SlurmHistoryItem;
+        let reqMem = historyJob.ReqMem ?? '';
         if (reqMem.endsWith('c')) {
             const memVal = parseFloat(reqMem);
-            const cpuVal = parseInt(job.ReqCPUS);
+            const cpuVal = parseInt(historyJob.ReqCPUS);
             if (!isNaN(memVal) && !isNaN(cpuVal)) {
                 const totalMem = memVal * cpuVal;
                 const unit = reqMem.replace(/[0-9.c]/g, '');
@@ -747,14 +756,14 @@ const JobDetails = ({ job, isHistory }: { job: any; isHistory: boolean }) => {
                 <div className="mb-2">
                     <h4 className="font-bold">Requested Resources:</h4>
                     <div className="flex space-x-6 text-sm flex-wrap">
-                        <span><strong className="font-semibold">CPU:</strong> {job.ReqCPUS}</span>
+                        <span><strong className="font-semibold">CPU:</strong> {historyJob.ReqCPUS}</span>
                         <span><strong className="font-semibold">Memory:</strong> {reqMem}</span>
-                        {Object.entries(parseTRES(job.ReqTRES).gres).map(([key, val]: [string, string]) => (
+                        {Object.entries(parseTRES(historyJob.ReqTRES).gres).map(([key, val]: [string, string]) => (
                             <span key={key}><strong className="font-semibold">GRES/{key.toUpperCase()}:</strong> {val}</span>
                         ))}
                     </div>
                 </div>
-                {job.steps && job.steps.length > 0 && (
+                {historyJob.steps && historyJob.steps.length > 0 && (
                     <>
                         <h4 className="font-bold mt-4 mb-2">Job Steps:</h4>
                         <table className="w-full text-left">
@@ -767,7 +776,7 @@ const JobDetails = ({ job, isHistory }: { job: any; isHistory: boolean }) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {job.steps.map((step: any) => (
+                                {historyJob.steps.map((step: SlurmHistoryItem) => (
                                     <tr key={step.JobID} className="text-xs text-gray-600">
                                         <td className="px-4 py-1 pl-6 font-mono">{step.JobID}</td>
                                         <td className="px-4 py-1 font-mono">{step.JobName}</td>
@@ -784,17 +793,18 @@ const JobDetails = ({ job, isHistory }: { job: any; isHistory: boolean }) => {
     }
 
     // For Queue Jobs
-    const allocTres = (job.details?.AllocTRES && job.details.AllocTRES !== '(null)') ? job.details.AllocTRES : job.details?.TRES;
-    const reqTres = job.details?.ReqTRES && job.details.ReqTRES !== '(null)' ? job.details.ReqTRES : null;
+    const queueJob = job as SlurmQueueItem;
+    const allocTres = (queueJob.details?.AllocTRES && queueJob.details.AllocTRES !== '(null)') ? queueJob.details.AllocTRES : queueJob.details?.TRES;
+    const reqTres = queueJob.details?.ReqTRES && queueJob.details.ReqTRES !== '(null)' ? queueJob.details.ReqTRES : null;
 
     return (
         <div>
             {allocTres === reqTres ? (
-                <TresDetails tresString={allocTres} title="Allocated & Requested Resources" />
+                <TresDetails tresString={allocTres ?? ''} title="Allocated & Requested Resources" />
             ) : (
                 <>
-                    <TresDetails tresString={allocTres} title="Allocated Resources" />
-                    <TresDetails tresString={reqTres} title="Requested Resources" />
+                    <TresDetails tresString={allocTres ?? ''} title="Allocated Resources" />
+                    <TresDetails tresString={reqTres ?? ''} title="Requested Resources" />
                 </>
             )}
         </div>
@@ -802,21 +812,35 @@ const JobDetails = ({ job, isHistory }: { job: any; isHistory: boolean }) => {
 };
 
 
-const JobRow = ({ job, isHistory = false, timezoneMode, detectedTimezone }: { job: any; isHistory: boolean; timezoneMode: string; detectedTimezone: string | null }) => {
+const JobRow = ({ job, isHistory = false, timezoneMode, detectedTimezone }: JobRowProps) => {
     const [isExpanded, setIsExpanded] = useState(false);
-    const hasDetails = (job.details && Object.keys(job.details).length > 0) || (isHistory && (job.steps?.length > 0 || job.ReqTRES));
+    
+    // Helper functions to safely access properties
+    const getJobId = (job: SlurmQueueItem | SlurmHistoryItem): string => {
+        return isHistory ? (job as SlurmHistoryItem).JobID : (job as SlurmQueueItem).JobId;
+    };
+    
+    const getJobName = (job: SlurmQueueItem | SlurmHistoryItem): string => {
+        return isHistory ? (job as SlurmHistoryItem).JobName : (job as SlurmQueueItem).Name;
+    };
+    
+    const historyJob = isHistory ? job as SlurmHistoryItem : null;
+    const queueJob = !isHistory ? job as SlurmQueueItem : null;
+    
+    const hasDetails = Boolean(queueJob?.details && Object.keys(queueJob.details).length > 0) || 
+                      Boolean(historyJob && ((historyJob.steps?.length ?? 0) > 0 || Boolean(historyJob.ReqTRES)));
 
-    const stateColors: { [key: string]: string } = {
+    const stateColors: Record<string, string> = {
         RUNNING: 'text-green-600', R: 'text-green-600',
         PENDING: 'text-yellow-600', PD: 'text-yellow-600',
         COMPLETED: 'text-blue-600',
         FAILED: 'text-red-600', TIMEOUT: 'text-red-600', CANCELLED: 'text-red-600', OUT_OF_MEMORY: 'text-red-600',
     };
-    const stateKey = Object.keys(stateColors).find((s: string) => (job.State || '').startsWith(s));
+    const stateKey = Object.keys(stateColors).find((s: string) => (job.State ?? '').startsWith(s));
     const stateColor = stateKey ? stateColors[stateKey] : 'text-gray-600';
 
-    const startTime = isHistory ? job.Start : job.details?.StartTime || 'N/A';
-    const endTime = isHistory ? job.End : job.details?.EndTime || 'N/A';
+    const startTime = historyJob ? historyJob.Start : (queueJob?.details?.StartTime ?? 'N/A');
+    const endTime = historyJob ? historyJob.End : (queueJob?.details?.EndTime ?? 'N/A');
     const relativeStartTime = getRelativeTimeString(startTime, timezoneMode, detectedTimezone);
     const relativeEndTime = getRelativeTimeString(endTime, timezoneMode, detectedTimezone);
 
@@ -824,11 +848,11 @@ const JobRow = ({ job, isHistory = false, timezoneMode, detectedTimezone }: { jo
         <>
             <tr className={`border-b hover:bg-gray-50 ${hasDetails ? 'cursor-pointer' : ''}`} onClick={() => hasDetails && setIsExpanded(!isExpanded)}>
                 <td className="px-2 py-2 text-center">{hasDetails && <span className={`arrow inline-block transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>}</td>
-                <td className="px-4 py-2 font-mono">{job.JobId || job.JobID}</td>
+                <td className="px-4 py-2 font-mono">{getJobId(job)}</td>
                 <td className="px-4 py-2">{job.User}</td>
                 <td className="px-4 py-2">{job.Partition}</td>
                 <td className={`px-4 py-2 font-semibold ${stateColor}`}>{job.State}</td>
-                <td className="px-4 py-2 font-mono">{job.Name || job.JobName}</td>
+                <td className="px-4 py-2 font-mono">{getJobName(job)}</td>
                 <td className="px-4 py-2">
                     {startTime}
                     {relativeStartTime && <><br /><span className="text-xs text-gray-500">{relativeStartTime}</span></>}
@@ -849,7 +873,7 @@ const JobRow = ({ job, isHistory = false, timezoneMode, detectedTimezone }: { jo
     );
 }
 
-const QueueTab = ({ queue, timezoneMode, detectedTimezone }: { queue: any[]; timezoneMode: string; detectedTimezone: string | null }) => {
+const QueueTab = ({ queue, timezoneMode, detectedTimezone }: { queue: SlurmQueueItem[]; timezoneMode: string; detectedTimezone: string | null }) => {
     if (queue.length === 0) return <p className="text-center text-gray-500">No queue data found.</p>;
 
     return (
@@ -868,14 +892,14 @@ const QueueTab = ({ queue, timezoneMode, detectedTimezone }: { queue: any[]; tim
                     </tr>
                 </thead>
                 <tbody>
-                    {queue.map((job: any) => <JobRow key={job.JobId} job={job} isHistory={false} timezoneMode={timezoneMode} detectedTimezone={detectedTimezone} />)}
+                    {queue.map((job) => <JobRow key={job.JobId} job={job} isHistory={false} timezoneMode={timezoneMode} detectedTimezone={detectedTimezone} />)}
                 </tbody>
             </table>
         </div>
     );
 };
 
-const HistoryTab = ({ history, timezoneMode, detectedTimezone }: { history: any[]; timezoneMode: string; detectedTimezone: string | null }) => {
+const HistoryTab = ({ history, timezoneMode, detectedTimezone }: { history: SlurmHistoryItem[]; timezoneMode: string; detectedTimezone: string | null }) => {
     const [filter, setFilter] = useState('');
 
     const filteredHistory = useMemo(() => {
@@ -914,7 +938,7 @@ const HistoryTab = ({ history, timezoneMode, detectedTimezone }: { history: any[
                     </tr>
                 </thead>
                 <tbody>
-                    {filteredHistory.map((job: any) => <JobRow key={job.JobID} job={job} isHistory={true} timezoneMode={timezoneMode} detectedTimezone={detectedTimezone} />)}
+                    {filteredHistory.map((job) => <JobRow key={job.JobID} job={job} isHistory={true} timezoneMode={timezoneMode} detectedTimezone={detectedTimezone} />)}
                 </tbody>
             </table>
         </div>
@@ -931,7 +955,7 @@ function App() {
     const [messageType, setMessageType] = useState('info');
     const [timezone, setTimezone] = useState('auto');
 
-    const showMessage = useCallback((text: string, type: string = 'info') => {
+    const showMessage = useCallback((text: string, type = 'info') => {
         setMessage(text);
         setMessageType(type);
     }, []);
@@ -960,9 +984,9 @@ function App() {
             }
 
             setMessage('');
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Parsing Error:", error);
-            showMessage(`Could not process input. Error: ${error.message}`, 'error');
+            showMessage(`Could not process input. Error: ${error instanceof Error ? error.message : String(error)}`, 'error');
             setSlurmData(null);
         }
     };
