@@ -238,11 +238,11 @@ export const detectAndParseAll = (rawData: string): SlurmData => {
             queue[jobIndex] = { ...queue[jobIndex], ...details, details: details };
         } else {
             queue.push({
-                JobId: details.JobId ?? '', 
-                Partition: details.Partition ?? '', 
+                JobId: details.JobId ?? '',
+                Partition: details.Partition ?? '',
                 Name: details.JobName ?? '',
-                User: (details.UserId ?? '').split('(')[0], 
-                State: details.JobState ?? '', 
+                User: (details.UserId ?? '').split('(')[0],
+                State: details.JobState ?? '',
                 Time: details.RunTime ?? '',
                 TimeLimit: details.TimeLimit ?? '',
                 Nodes: details.NodeList ?? '',
@@ -318,7 +318,7 @@ const CommandBlock = ({ onCopy, copyText }: { onCopy: () => void; copyText: stri
     <div className="bg-gray-100 p-4 rounded-lg mb-6">
         <div className="flex justify-between items-center mb-2">
             <label className="block text-sm font-bold text-gray-700">Recommended All-in-One Command</label>
-            <button type="button" onClick={onCopy} className="bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-md hover:bg-gray-700 transition duration-200 w-16 text-center">
+            <button type="button" onClick={onCopy} className="bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-md hover:bg-gray-700 transition duration-200 w-16 text-center cursor-pointer">
                 {copyText}
             </button>
         </div>
@@ -384,10 +384,10 @@ const InputSection = ({ onAnalyze, showMessage }: { onAnalyze: (text: string) =>
                 onKeyDown={handleKeyDown}
             />
             <div className="mt-4 flex flex-col sm:flex-row gap-2">
-                <button type="button" onClick={handleAnalyzeClick} className="w-full sm:w-1/2 bg-indigo-600 text-white font-bold py-3 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-300">
+                <button type="button" onClick={handleAnalyzeClick} className="w-full sm:w-1/2 bg-indigo-600 text-white font-bold py-3 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-300 cursor-pointer">
                     Analyze Cluster Data
                 </button>
-                <button type="button" onClick={handleExampleClick} className="w-full sm:w-1/2 bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition duration-300">
+                <button type="button" onClick={handleExampleClick} className="w-full sm:w-1/2 bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition duration-300 cursor-pointer">
                     Load Example Data
                 </button>
             </div>
@@ -464,7 +464,7 @@ const ConfigurationPane = ({ timezone, setTimezone, detectedTimezone, clusterDat
 const TabButton = ({ tabId, activeTab, onClick, children }: { tabId: string; activeTab: string; onClick: (id: string) => void; children: React.ReactNode }) => (
     <button
         type="button"
-        className={`tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === tabId ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+        className={`tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm cursor-pointer ${activeTab === tabId ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
         onClick={() => onClick(tabId)}
     >
         {children}
@@ -814,21 +814,21 @@ const JobDetails = ({ job, isHistory }: { job: SlurmQueueItem | SlurmHistoryItem
 
 const JobRow = ({ job, isHistory = false, timezoneMode, detectedTimezone }: JobRowProps) => {
     const [isExpanded, setIsExpanded] = useState(false);
-    
+
     // Helper functions to safely access properties
     const getJobId = (job: SlurmQueueItem | SlurmHistoryItem): string => {
         return isHistory ? (job as SlurmHistoryItem).JobID : (job as SlurmQueueItem).JobId;
     };
-    
+
     const getJobName = (job: SlurmQueueItem | SlurmHistoryItem): string => {
         return isHistory ? (job as SlurmHistoryItem).JobName : (job as SlurmQueueItem).Name;
     };
-    
+
     const historyJob = isHistory ? job as SlurmHistoryItem : null;
     const queueJob = !isHistory ? job as SlurmQueueItem : null;
-    
-    const hasDetails = Boolean(queueJob?.details && Object.keys(queueJob.details).length > 0) || 
-                      Boolean(historyJob && ((historyJob.steps?.length ?? 0) > 0 || Boolean(historyJob.ReqTRES)));
+
+    const hasDetails = Boolean(queueJob?.details && Object.keys(queueJob.details).length > 0) ||
+        Boolean(historyJob && ((historyJob.steps?.length ?? 0) > 0 || Boolean(historyJob.ReqTRES)));
 
     const stateColors: Record<string, string> = {
         RUNNING: 'text-green-600', R: 'text-green-600',
