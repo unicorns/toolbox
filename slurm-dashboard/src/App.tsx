@@ -389,7 +389,23 @@ const InputSection = ({ onAnalyze, showMessage }: { onAnalyze: (text: string) =>
     );
 };
 
-const ConfigurationPane = ({ timezone, setTimezone, detectedTimezone }: { timezone: string; setTimezone: (tz: string) => void; detectedTimezone: string | null }) => (
+const DataTimestampDisplay = ({ clusterDate, timezone, detectedTimezone }: { clusterDate: string | null; timezone: string; detectedTimezone: string | null }) => {
+    if (!clusterDate) {
+        return <p className="text-center text-gray-500">No timestamp found in data.</p>;
+    }
+
+    const relativeTime = getRelativeTimeString(clusterDate, timezone, detectedTimezone);
+
+    return (
+        <div className="text-center p-4">
+            <p className="text-lg font-semibold text-gray-800 font-mono">{clusterDate}</p>
+            {relativeTime && <p className="text-sm text-gray-500 mt-1">({relativeTime})</p>}
+        </div>
+    );
+};
+
+
+const ConfigurationPane = ({ timezone, setTimezone, detectedTimezone, clusterDate }: { timezone: string; setTimezone: (tz: string) => void; detectedTimezone: string | null; clusterDate: string | null }) => (
     <div className="mt-6 border-t pt-6 max-w-6xl mx-auto">
         <div className="grid md:grid-cols-2 gap-6">
             <div>
@@ -412,6 +428,12 @@ const ConfigurationPane = ({ timezone, setTimezone, detectedTimezone }: { timezo
                                 <option value="local">Local (Browser)</option>
                             </select>
                         </div>
+                    </div>
+                </div>
+                <div className="mt-6">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Data Collection Time</h3>
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                        <DataTimestampDisplay clusterDate={clusterDate} timezone={timezone} detectedTimezone={detectedTimezone} />
                     </div>
                 </div>
             </div>
@@ -970,6 +992,7 @@ function App() {
                                 timezone={timezone}
                                 setTimezone={setTimezone}
                                 detectedTimezone={slurmData.detectedTimezone}
+                                clusterDate={slurmData.clusterDate}
                             />
                             <div id="dashboard-tabs" className="max-w-7xl mx-auto mt-6">
                                 <div className="border-b border-gray-200 mb-6">
