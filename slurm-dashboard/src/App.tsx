@@ -420,7 +420,7 @@ const ConfigurationPane = ({ timezone, setTimezone, detectedTimezone }: { timezo
                 <div className="p-4 bg-gray-50 rounded-lg text-sm space-y-2">
                     <div className="flex items-center"><span className="inline-block bg-indigo-600 text-white font-semibold text-xs mr-1 mb-1 px-2 py-0.5 rounded-full">Partition</span><span className="ml-2">= Partition with active jobs on a node</span></div>
                     <div className="flex items-center"><span className="inline-block bg-gray-200 text-gray-700 text-xs mr-1 mb-1 px-2 py-0.5 rounded-full">Partition</span><span className="ml-2">= Partition with no active jobs on a node</span></div>
-                    <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-indigo-100 text-indigo-800">ALLOCATED</span><span className="ml-2">= Node is fully allocated</span></div>
+                    <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-orange-100 text-orange-800">ALLOCATED</span><span className="ml-2">= Node is fully allocated</span></div>
                     <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-800">MIXED</span><span className="ml-2">= Node is partially allocated</span></div>
                     <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-green-100 text-green-800">IDLE</span><span className="ml-2">= Node is idle</span></div>
                     <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-red-100 text-red-800">DOWN/DRAIN</span><span className="ml-2">= Node is down, drained, or unavailable</span></div>
@@ -599,7 +599,7 @@ const NodeCard = ({ name, details, jobs }: { name: string; details: Record<strin
     if (details.State.includes('DOWN') || details.State.includes('DRAIN')) {
         stateColor = 'bg-red-100 text-red-800';
     } else if (details.State.includes('ALLOCATED')) {
-        stateColor = 'bg-indigo-100 text-indigo-800';
+        stateColor = 'bg-orange-100 text-orange-800';
     } else if (details.State.includes('MIXED')) {
         stateColor = 'bg-blue-100 text-blue-800';
     } else if (details.State.includes('IDLE')) {
