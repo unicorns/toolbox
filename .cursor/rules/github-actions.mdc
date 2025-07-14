@@ -1,0 +1,6 @@
+---
+description: Rule for all changes related to github actions
+alwaysApply: false
+---
+
+When specifying actions in GitHub workflows, always pin to a specific commit SHA instead of just the version tag (e.g., `actions/checkout@<sha>` rather than `@v4`). When adding a new action, make sure the SHA corresponds to the latest release (not pre-release or dev commit on the main branch). Use web search to find the latest release if necessary.
