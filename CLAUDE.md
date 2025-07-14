@@ -78,7 +78,7 @@ env:
 ```
 
 ### Build Configuration
-- **Vite**: Modern build tool with React and Tailwind plugins
+- **Vite**: Modern build tool with React and Tailwind plugins, configured with `base: './'` for subdirectory deployment
 - **TypeScript**: Strict type checking with project references
 - **ESLint**: Code linting with React-specific rules
 
