@@ -418,12 +418,12 @@ const ConfigurationPane = ({ timezone, setTimezone, detectedTimezone }: { timezo
             <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-4">UI Legend</h3>
                 <div className="p-4 bg-gray-50 rounded-lg text-sm space-y-2">
-                    <div className="flex items-center"><span className="ml-2 text-xs font-semibold bg-orange-200 text-orange-800 px-2 py-0.5 rounded-full">P</span><span className="ml-2">= Preemptible Partition</span></div>
                     <div className="flex items-center"><span className="inline-block bg-indigo-600 text-white font-semibold text-xs mr-1 mb-1 px-2 py-0.5 rounded-full">Partition</span><span className="ml-2">= Partition with active jobs on a node</span></div>
                     <div className="flex items-center"><span className="inline-block bg-gray-200 text-gray-700 text-xs mr-1 mb-1 px-2 py-0.5 rounded-full">Partition</span><span className="ml-2">= Partition with no active jobs on a node</span></div>
-                    <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-800">STATE</span><span className="ml-2">= Node is fully or partially allocated</span></div>
-                    <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-green-100 text-green-800">STATE</span><span className="ml-2">= Node is idle</span></div>
-                    <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-red-100 text-red-800">STATE</span><span className="ml-2">= Node is down, drained, or unavailable</span></div>
+                    <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-indigo-100 text-indigo-800">ALLOCATED</span><span className="ml-2">= Node is fully allocated</span></div>
+                    <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-800">MIXED</span><span className="ml-2">= Node is partially allocated</span></div>
+                    <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-green-100 text-green-800">IDLE</span><span className="ml-2">= Node is idle</span></div>
+                    <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-red-100 text-red-800">DOWN/DRAIN</span><span className="ml-2">= Node is down, drained, or unavailable</span></div>
                 </div>
             </div>
         </div>
@@ -595,13 +595,16 @@ const NodeCard = ({ name, details, jobs }: { name: string; details: Record<strin
     const cpuPct = cpuTot > 0 ? (cpuAlloc / cpuTot * 100) : 0;
     const memPct = memTot > 0 ? (memAlloc / memTot * 100) : 0;
 
-    const stateColors: { [key: string]: string } = {
-        DOWN: 'bg-red-100 text-red-800', DRAIN: 'bg-red-100 text-red-800',
-        ALLOC: 'bg-blue-100 text-blue-800', MIXED: 'bg-blue-100 text-blue-800',
-        IDLE: 'bg-green-100 text-green-800',
-    };
-    const stateKey = Object.keys(stateColors).find((s: string) => details.State.includes(s));
-    const stateColor = stateKey ? stateColors[stateKey] : 'bg-gray-100 text-gray-800';
+    let stateColor = 'bg-gray-100 text-gray-800'; // default
+    if (details.State.includes('DOWN') || details.State.includes('DRAIN')) {
+        stateColor = 'bg-red-100 text-red-800';
+    } else if (details.State.includes('ALLOCATED')) {
+        stateColor = 'bg-indigo-100 text-indigo-800';
+    } else if (details.State.includes('MIXED')) {
+        stateColor = 'bg-blue-100 text-blue-800';
+    } else if (details.State.includes('IDLE')) {
+        stateColor = 'bg-green-100 text-green-800';
+    }
 
     const activePartitions = new Set(jobs.map((j: any) => j.Partition));
 
