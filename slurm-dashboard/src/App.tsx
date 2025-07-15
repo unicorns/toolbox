@@ -318,7 +318,7 @@ const CommandBlock = ({ onCopy, copyText }: { onCopy: () => void; copyText: stri
     <div className="bg-gray-100 p-4 rounded-lg mb-6">
         <div className="flex justify-between items-center mb-2">
             <label className="block text-sm font-bold text-gray-700">Recommended All-in-One Command</label>
-            <button type="button" onClick={onCopy} className="bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-md hover:bg-gray-700 transition duration-200 w-16 text-center cursor-pointer">
+            <button type="button" onClick={onCopy} className="bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-md hover:bg-gray-700 transition duration-200 w-20 text-center cursor-pointer">
                 {copyText}
             </button>
         </div>
