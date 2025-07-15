@@ -310,7 +310,7 @@ const MessageBox = ({ message, type, onDismiss }: { message: string; type: strin
 const Header = () => (
     <header className="text-center mb-6">
         <h1 className="text-4xl font-bold text-gray-900">Slurm Dashboard</h1>
-        <p className="text-lg text-gray-600 mt-2">An interactive dashboard for visualizing your Slurm cluster's status, now in React.</p>
+        <p className="text-lg text-gray-600 mt-2">An interactive dashboard for visualizing your Slurm cluster's status</p>
     </header>
 );
 

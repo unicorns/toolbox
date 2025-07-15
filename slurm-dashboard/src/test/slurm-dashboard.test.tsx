@@ -156,7 +156,7 @@ describe('Slurm Dashboard', () => {
       render(<App />)
       
       expect(screen.getByText('Slurm Dashboard')).toBeInTheDocument()
-      expect(screen.getByText('An interactive dashboard for visualizing your Slurm cluster\'s status, now in React.')).toBeInTheDocument()
+      expect(screen.getByText('An interactive dashboard for visualizing your Slurm cluster\'s status')).toBeInTheDocument()
       expect(screen.getByText('Recommended All-in-One Command')).toBeInTheDocument()
     })
 
