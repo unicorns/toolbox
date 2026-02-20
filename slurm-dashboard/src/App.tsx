@@ -4,7 +4,7 @@ import type { SlurmData, SlurmQueueItem, SlurmHistoryItem, JobRowProps, Timezone
 import {
     SLURM_COMMAND, ANONYMIZED_EXAMPLE_DATA,
     expandNodeList, parseTRES, parseMemoryToMB, parseUnitValue, parseGresField,
-    getRelativeTimeString, detectAndParseAll,
+    getRelativeTimeString, detectAndParseAll, computeClusterSummary, formatMemoryMB,
 } from './parsing';
 
 
@@ -182,6 +182,93 @@ function ConfigurationPane({ timezone, setTimezone, detectedTimezone, clusterDat
 
 // --- TABS & CONTENT COMPONENTS ---
 
+function getGresBarColor(type: string): string {
+    return type.includes('gpu') ? 'bg-purple-600' : 'bg-teal-500';
+}
+
+function CompactProgressBar({ value, color }: { value: number; color: string }) {
+    return (
+        <div className="bg-gray-200 rounded-full h-2 w-full mt-1 overflow-hidden">
+            <div className={`${color} h-2 rounded-full`} style={{ width: `${Math.min(value, 100)}%` }} />
+        </div>
+    );
+}
+
+function ClusterSummary({ partitions, nodes }: { partitions: Map<string, PartitionData>; nodes: Map<string, NodeData> }) {
+    const summary = useMemo(() => computeClusterSummary(partitions, nodes), [partitions, nodes]);
+
+    if (summary.partitions.length === 0) return null;
+
+    const allGresTypes = summary.totals.gres.map(g => g.type);
+
+    function renderRow(row: typeof summary.totals, isTotal = false) {
+        const cpuPct = row.cpuTotal > 0 ? (row.cpuAllocated / row.cpuTotal * 100) : 0;
+        const memPct = row.memTotalMB > 0 ? (row.memAllocatedMB / row.memTotalMB * 100) : 0;
+        const rowClass = isTotal
+            ? 'border-t-2 border-gray-300 bg-gray-50 font-bold'
+            : 'border-b border-gray-100 hover:bg-gray-50';
+        const gresByType = new Map(row.gres.map(g => [g.type, g]));
+
+        return (
+            <tr key={row.partitionName} className={rowClass}>
+                <td className="px-3 py-2 whitespace-nowrap">{row.partitionName}</td>
+                <td className="px-3 py-2">
+                    <div>{row.nodesUp}/{row.nodesTotal}{row.nodesDown > 0 && <span className="text-red-600 ml-1">({row.nodesDown} down)</span>}</div>
+                    <CompactProgressBar value={row.nodesTotal > 0 ? (row.nodesUp / row.nodesTotal * 100) : 0} color="bg-gray-500" />
+                </td>
+                <td className="px-3 py-2">
+                    <div>{row.cpuAllocated.toLocaleString()}/{row.cpuTotal.toLocaleString()} <span className="text-gray-500">({cpuPct.toFixed(0)}%)</span></div>
+                    <CompactProgressBar value={cpuPct} color="bg-blue-500" />
+                </td>
+                <td className="px-3 py-2">
+                    <div>{formatMemoryMB(row.memAllocatedMB)}/{formatMemoryMB(row.memTotalMB)} <span className="text-gray-500">({memPct.toFixed(0)}%)</span></div>
+                    <CompactProgressBar value={memPct} color="bg-green-500" />
+                </td>
+                {allGresTypes.map(type => {
+                    const gres = gresByType.get(type);
+                    if (!gres || gres.total === 0) {
+                        return <td key={type} className="px-3 py-2"><span className="text-gray-400">—</span></td>;
+                    }
+                    const pct = gres.allocated / gres.total * 100;
+                    return (
+                        <td key={type} className="px-3 py-2">
+                            <div>{gres.allocated}/{gres.total} <span className="text-gray-500">({pct.toFixed(0)}%)</span></div>
+                            <CompactProgressBar value={pct} color={getGresBarColor(type)} />
+                        </td>
+                    );
+                })}
+            </tr>
+        );
+    }
+
+    return (
+        <div className="max-w-7xl mx-auto mt-6">
+            <div className="bg-white p-6 rounded-lg shadow-md">
+                <h2 className="text-xl font-bold text-gray-800 mb-4">Cluster Resource Summary</h2>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
+                            <tr>
+                                <th className="px-3 py-3">Partition</th>
+                                <th className="px-3 py-3">Nodes</th>
+                                <th className="px-3 py-3">CPUs</th>
+                                <th className="px-3 py-3">Memory</th>
+                                {allGresTypes.map(type => (
+                                    <th key={type} className="px-3 py-3">{type.toUpperCase()}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {summary.partitions.map(p => renderRow(p))}
+                            {renderRow(summary.totals, true)}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function TabButton({ tabId, activeTab, onClick, children }: { tabId: string; activeTab: string; onClick: (id: string) => void; children: ReactNode }) {
     return (
         <button
@@ -265,10 +352,6 @@ function GresResourceDisplay({ details }: { details: Record<string, string> }) {
             gresGroups.set(baseType, group);
         }
         group.push(key);
-    }
-
-    function getGresBarColor(type: string): string {
-        return type.includes('gpu') ? 'bg-purple-600' : 'bg-teal-500';
     }
 
     return (
@@ -727,6 +810,7 @@ function App() {
                                 detectedTimezone={slurmData.detectedTimezone}
                                 clusterDate={slurmData.clusterDate}
                             />
+                            <ClusterSummary partitions={slurmData.partitions} nodes={slurmData.nodes} />
                             <div id="dashboard-tabs" className="max-w-7xl mx-auto mt-6">
                                 <div className="border-b border-gray-200 mb-6">
                                     <nav className="flex -mb-px space-x-6" aria-label="Tabs">

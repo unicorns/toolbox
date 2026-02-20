@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
-import { parseKeyValueString, expandNodeList, parseTRES, detectAndParseAll, ANONYMIZED_EXAMPLE_DATA } from '../parsing'
+import { parseKeyValueString, expandNodeList, parseTRES, detectAndParseAll, computeClusterSummary, formatMemoryMB, ANONYMIZED_EXAMPLE_DATA } from '../parsing'
 import type { SlurmData, SlurmQueueItem, SlurmHistoryItem } from '../types'
 
 
@@ -194,8 +194,8 @@ describe('Slurm Dashboard', () => {
       await user.click(partitionsTab)
       
       await waitFor(() => {
-        expect(screen.getAllByText('gpu-high')).toHaveLength(1)
-        expect(screen.getAllByText('cpu-low')).toHaveLength(1)
+        expect(screen.getAllByText('gpu-high').length).toBeGreaterThanOrEqual(1)
+        expect(screen.getAllByText('cpu-low').length).toBeGreaterThanOrEqual(1)
         expect(screen.getByText('Default')).toBeInTheDocument() // cpu-low should show as default
       })
     })
@@ -620,6 +620,101 @@ describe('Slurm Dashboard', () => {
       await waitFor(() => {
         // Check for GRES/GPU information
         expect(screen.getAllByText(/GRES\/GPU/).length).toBeGreaterThan(0)
+      })
+    })
+  })
+
+  describe('Cluster Resource Summary', () => {
+    let parsedData: SlurmData
+
+    beforeEach(() => {
+      parsedData = detectAndParseAll(ANONYMIZED_EXAMPLE_DATA)
+    })
+
+    it('should compute per-partition resource totals', () => {
+      const summary = computeClusterSummary(parsedData.partitions, parsedData.nodes)
+      expect(summary.partitions.length).toBe(2)
+
+      const gpuHigh = summary.partitions.find(p => p.partitionName === 'gpu-high')
+      expect(gpuHigh).toBeDefined()
+      expect(gpuHigh!.nodesTotal).toBe(3)
+      expect(gpuHigh!.cpuTotal).toBe(128) // 32+48+48
+      expect(gpuHigh!.cpuAllocated).toBe(56) // 8+48+0
+
+      const gpuGres = gpuHigh!.gres.find(g => g.type === 'gpu')
+      expect(gpuGres).toBeDefined()
+      expect(gpuGres!.total).toBe(12) // 4+4+4
+      expect(gpuGres!.allocated).toBe(6) // 2+4+0
+    })
+
+    it('should compute cluster-wide totals without double-counting shared nodes', () => {
+      const summary = computeClusterSummary(parsedData.partitions, parsedData.nodes)
+      expect(summary.totals.nodesTotal).toBe(5) // 5 unique nodes
+      expect(summary.totals.cpuTotal).toBe(192) // 32+48+48+32+32
+      expect(summary.totals.cpuAllocated).toBe(88) // 8+48+0+32+0
+    })
+
+    it('should classify node states correctly', () => {
+      const summary = computeClusterSummary(parsedData.partitions, parsedData.nodes)
+      expect(summary.totals.nodesDown).toBe(0)
+      expect(summary.totals.nodesUp).toBe(5)
+    })
+
+    it('should track GRES types separately', () => {
+      const summary = computeClusterSummary(parsedData.partitions, parsedData.nodes)
+      const gpuHigh = summary.partitions.find(p => p.partitionName === 'gpu-high')!
+      expect(gpuHigh.gres.length).toBe(3) // gpu, gpu:a100, gpu:v100
+
+      const a100 = gpuHigh.gres.find(g => g.type === 'gpu:a100')
+      expect(a100).toBeDefined()
+      expect(a100!.total).toBe(4)
+      expect(a100!.allocated).toBe(2)
+
+      const v100 = gpuHigh.gres.find(g => g.type === 'gpu:v100')
+      expect(v100).toBeDefined()
+      expect(v100!.total).toBe(8)
+      expect(v100!.allocated).toBe(4)
+    })
+
+    it('should handle partitions with no GPUs but other GRES', () => {
+      const summary = computeClusterSummary(parsedData.partitions, parsedData.nodes)
+      const cpuLow = summary.partitions.find(p => p.partitionName === 'cpu-low')!
+      // cpu-low nodes have Gres=tmpfs:100G but no GPUs
+      expect(cpuLow.gres.some(g => g.type.startsWith('gpu'))).toBe(false)
+      expect(cpuLow.gres.some(g => g.type === 'tmpfs')).toBe(true)
+    })
+
+    it('should compute memory totals correctly', () => {
+      const summary = computeClusterSummary(parsedData.partitions, parsedData.nodes)
+      // node-a1: 256000MB, node-b1: 256000MB, node-b2: 256000MB
+      const gpuHigh = summary.partitions.find(p => p.partitionName === 'gpu-high')!
+      expect(gpuHigh.memTotalMB).toBe(768000) // 256000*3
+    })
+  })
+
+  describe('formatMemoryMB', () => {
+    it('should format MiB values', () => {
+      expect(formatMemoryMB(512)).toBe('512 MiB')
+    })
+
+    it('should format GiB values', () => {
+      expect(formatMemoryMB(1024)).toBe('1.0 GiB')
+      expect(formatMemoryMB(256000)).toBe('250.0 GiB')
+    })
+
+    it('should format TiB values', () => {
+      expect(formatMemoryMB(1048576)).toBe('1.0 TiB')
+    })
+  })
+
+  describe('Cluster Summary Component', () => {
+    it('should render the cluster summary table when data is loaded', async () => {
+      render(<App />)
+      await loadExampleData()
+
+      await waitFor(() => {
+        expect(screen.getByText('Cluster Resource Summary')).toBeInTheDocument()
+        expect(screen.getByText('Total')).toBeInTheDocument()
       })
     })
   })

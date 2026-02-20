@@ -58,3 +58,26 @@ export interface SlurmData {
   clusterDate: string | null;
   detectedTimezone: string | null;
 }
+
+export interface GresTypeSummary {
+  type: string;
+  total: number;
+  allocated: number;
+}
+
+export interface PartitionResourceSummary {
+  partitionName: string;
+  nodesTotal: number;
+  nodesUp: number;
+  nodesDown: number;
+  cpuTotal: number;
+  cpuAllocated: number;
+  memTotalMB: number;
+  memAllocatedMB: number;
+  gres: GresTypeSummary[];
+}
+
+export interface ClusterResourceSummary {
+  partitions: PartitionResourceSummary[];
+  totals: PartitionResourceSummary;
+}
