@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import App, { parseKeyValueString, expandNodeList, parseTRES, detectAndParseAll, ANONYMIZED_EXAMPLE_DATA } from '../App'
+import App from '../App'
+import { parseKeyValueString, expandNodeList, parseTRES, detectAndParseAll, ANONYMIZED_EXAMPLE_DATA } from '../parsing'
 import type { SlurmData, SlurmQueueItem, SlurmHistoryItem } from '../types'
 
 

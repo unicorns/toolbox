@@ -1,24 +1,18 @@
-// Type definitions for Slurm dashboard data structures
+export type TimezoneMode = 'auto' | 'utc' | 'local';
 
-export interface SlurmPartition {
-  PartitionName: string;
-  [key: string]: string;
+export interface TresResources {
+  cpu: string;
+  mem: string;
+  gres: Record<string, string>;
 }
 
-export interface SlurmNode {
-  NodeName: string;
-  State: string;
-  Partition?: string;
-  [key: string]: string | undefined;
+export interface PartitionData {
+  nodes: Set<string>;
+  details: Record<string, string>;
 }
 
-export interface SlurmJob {
-  JobId: string;
-  JobName: string;
-  User: string;
-  Partition: string;
-  State: string;
-  [key: string]: string;
+export interface NodeData {
+  details: Record<string, string>;
 }
 
 export interface SlurmQueueItem {
@@ -32,17 +26,7 @@ export interface SlurmQueueItem {
   Nodes: string;
   NodeList: string;
   details?: Record<string, string>;
-  [key: string]: string | Record<string, string> | undefined;
 }
-
-export interface JobRowProps {
-  job: SlurmQueueItem | SlurmHistoryItem;
-  isHistory: boolean;
-  timezoneMode: string;
-  detectedTimezone: string | null;
-}
-
-export type NodeJobsMap = Record<string, SlurmQueueItem[]>;
 
 export interface SlurmHistoryItem {
   JobID: string;
@@ -57,22 +41,20 @@ export interface SlurmHistoryItem {
   ReqCPUS: string;
   ReqTRES: string;
   steps?: SlurmHistoryItem[];
-  [key: string]: string | SlurmHistoryItem[] | undefined;
+}
+
+export interface JobRowProps {
+  job: SlurmQueueItem | SlurmHistoryItem;
+  isHistory: boolean;
+  timezoneMode: TimezoneMode;
+  detectedTimezone: string | null;
 }
 
 export interface SlurmData {
-  partitions: Map<string, { nodes: Set<string>; details: Record<string, string> }>;
-  nodes: Map<string, { details: Record<string, string> }>;
+  partitions: Map<string, PartitionData>;
+  nodes: Map<string, NodeData>;
   queue: SlurmQueueItem[];
   history: SlurmHistoryItem[];
   clusterDate: string | null;
   detectedTimezone: string | null;
-}
-
-export interface ParsedSlurmData {
-  partitions: SlurmPartition[];
-  nodes: SlurmNode[];
-  queue: SlurmQueueItem[];
-  jobs: SlurmJob[];
-  history: SlurmHistoryItem[];
 }
