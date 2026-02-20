@@ -24,7 +24,7 @@ concurrency:
 env:
   # Define all projects here - change this list to add/remove projects
   NODE_PROJECTS: "slurm-dashboard"
-  STATIC_PROJECTS: "slurm"
+  STATIC_PROJECTS: ""
 
 jobs:
   # Build all projects in parallel
