@@ -6,6 +6,38 @@ import {
     expandNodeList, parseTRES, parseMemoryToMB, parseUnitValue, parseGresField,
     getRelativeTimeString, detectAndParseAll, computeClusterSummary, formatMemoryMB,
 } from './parsing';
+import { useTheme, type Theme } from './useTheme';
+
+
+// --- SHARED STYLE CONSTANTS ---
+// Common dark-mode-aware class fragments used across many components.
+
+/** Muted/secondary text (labels, hints, empty-state messages). */
+const TEXT_MUTED = 'text-gray-500 dark:text-gray-400';
+
+/** Secondary body text (descriptions, form labels). */
+const TEXT_SECONDARY = 'text-gray-700 dark:text-gray-300';
+
+/** Primary body text (headings, values). */
+const TEXT_PRIMARY = 'text-gray-800 dark:text-gray-200';
+
+/** Prominent heading text. */
+const TEXT_HEADING = 'text-gray-900 dark:text-gray-100';
+
+/** Standard card / panel surface. */
+const BG_CARD = 'bg-white dark:bg-gray-800';
+
+/** Recessed / inset surface (settings panels, table headers, expanded rows). */
+const BG_INSET = 'bg-gray-50 dark:bg-gray-700';
+
+/** Chip / badge / progress-track surface. */
+const BG_CHIP = 'bg-gray-200 dark:bg-gray-600';
+
+/** Subdued body text (job metadata, step details). */
+const TEXT_SUBDUED = 'text-gray-600 dark:text-gray-400';
+
+/** Dark-mode border override. Pair with the appropriate light border (e.g. border-gray-200 or border-gray-300). */
+const BORDER_SUBTLE = 'dark:border-gray-600';
 
 
 // --- HELPER & UI COMPONENTS ---
@@ -28,28 +60,61 @@ function MessageBox({ message, type, onDismiss }: { message: string; type: strin
     );
 }
 
-function Header() {
+function ThemeToggle({ theme, setTheme }: { theme: Theme; setTheme: (t: Theme) => void }) {
+    const options: { value: Theme; label: string }[] = [
+        { value: 'light', label: 'Light' },
+        { value: 'system', label: 'System' },
+        { value: 'dark', label: 'Dark' },
+    ];
     return (
-        <header className="text-center mb-6">
-            <h1 className="text-4xl font-bold text-gray-900">Slurm Dashboard</h1>
-            <p className="text-lg text-gray-600 mt-2">An interactive dashboard for visualizing your Slurm cluster's status</p>
+        <div className="inline-flex rounded-md shadow-sm text-xs" role="group" aria-label="Theme">
+            {options.map(({ value, label }) => (
+                <button
+                    key={value}
+                    type="button"
+                    aria-pressed={theme === value}
+                    onClick={() => setTheme(value)}
+                    className={`px-3 py-1.5 font-medium border cursor-pointer first:rounded-l-md last:rounded-r-md ${
+                        theme === value
+                            ? 'bg-indigo-600 dark:bg-indigo-500 text-white border-indigo-600 dark:border-indigo-500'
+                            : `bg-white ${TEXT_SECONDARY} border-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:hover:bg-gray-600`
+                    }`}
+                >
+                    {label}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+function Header({ theme, setTheme }: { theme: Theme; setTheme: (t: Theme) => void }) {
+    return (
+        <header className="mb-6 flex items-center justify-between">
+            <div className="w-36 hidden sm:block" />
+            <div className="text-center flex-1">
+                <h1 className={`text-4xl font-bold ${TEXT_HEADING}`}>Slurm Dashboard</h1>
+                <p className={`text-lg ${TEXT_SUBDUED} mt-2`}>An interactive dashboard for visualizing your Slurm cluster's status</p>
+            </div>
+            <div className="flex-shrink-0">
+                <ThemeToggle theme={theme} setTheme={setTheme} />
+            </div>
         </header>
     );
 }
 
 function CommandBlock({ onCopy, copyText }: { onCopy: () => void; copyText: string }) {
     return (
-        <div className="bg-gray-100 p-4 rounded-lg mb-6">
+        <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg mb-6">
             <div className="flex justify-between items-center mb-2">
-                <label className="block text-sm font-bold text-gray-700">Recommended All-in-One Command</label>
-                <button type="button" onClick={onCopy} className="bg-gray-600 text-white text-xs font-bold py-1 px-3 rounded-md hover:bg-gray-700 transition duration-200 w-20 text-center cursor-pointer">
+                <label className={`block text-sm font-bold ${TEXT_SECONDARY}`}>Recommended All-in-One Command</label>
+                <button type="button" onClick={onCopy} className="bg-gray-600 dark:bg-gray-500 text-white text-xs font-bold py-1 px-3 rounded-md hover:bg-gray-700 dark:hover:bg-gray-400 transition duration-200 w-20 text-center cursor-pointer">
                     {copyText}
                 </button>
             </div>
             <pre className="bg-gray-800 text-white p-3 rounded-md text-xs overflow-x-auto">
                 <code>{SLURM_COMMAND}</code>
             </pre>
-            <p className="text-xs text-gray-500 mt-2">Note: `sacct` can be slow. The command above limits history to the last day. Adjust as needed.</p>
+            <p className={`text-xs ${TEXT_MUTED} mt-2`}>Note: `sacct` can be slow. The command above limits history to the last day. Adjust as needed.</p>
         </div>
     );
 }
@@ -90,24 +155,24 @@ function InputSection({ onAnalyze, showMessage }: { onAnalyze: (text: string) =>
     }
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-lg mb-8 max-w-6xl mx-auto">
-            <p className="text-gray-700 mb-6">This tool parses the output of standard Slurm commands to create a user-friendly, visual representation of your cluster's partitions, nodes, and job queue. Paste your command outputs below to get started.</p>
+        <div className={`${BG_CARD} p-6 rounded-lg shadow-lg mb-8 max-w-6xl mx-auto`}>
+            <p className={`${TEXT_SECONDARY} mb-6`}>This tool parses the output of standard Slurm commands to create a user-friendly, visual representation of your cluster's partitions, nodes, and job queue. Paste your command outputs below to get started.</p>
             <CommandBlock onCopy={handleCopy} copyText={copyText} />
-            <label htmlFor="slurm-input" className="block text-lg font-medium text-gray-700 mb-2">Paste Slurm Command Outputs Here</label>
+            <label htmlFor="slurm-input" className={`block text-lg font-medium ${TEXT_SECONDARY} mb-2`}>Paste Slurm Command Outputs Here</label>
             <textarea
                 id="slurm-input"
                 rows={12}
-                className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                className={`w-full p-3 border border-gray-300 ${BORDER_SUBTLE} rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition dark:bg-gray-700 dark:text-gray-200`}
                 placeholder="Paste one or more command outputs..."
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
             />
             <div className="mt-4 flex flex-col sm:flex-row gap-2">
-                <button type="button" onClick={handleAnalyzeClick} className="w-full sm:w-1/2 bg-indigo-600 text-white font-bold py-3 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-300 cursor-pointer">
+                <button type="button" onClick={handleAnalyzeClick} className="w-full sm:w-1/2 bg-indigo-600 text-white font-bold py-3 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-indigo-500 transition duration-300 cursor-pointer">
                     Analyze Cluster Data
                 </button>
-                <button type="button" onClick={handleExampleClick} className="w-full sm:w-1/2 bg-gray-200 text-gray-800 font-bold py-3 px-4 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400 transition duration-300 cursor-pointer">
+                <button type="button" onClick={handleExampleClick} className={`w-full sm:w-1/2 ${BG_CHIP} ${TEXT_PRIMARY} font-bold py-3 px-4 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-gray-400 transition duration-300 cursor-pointer`}>
                     Load Example Data
                 </button>
             </div>
@@ -117,35 +182,35 @@ function InputSection({ onAnalyze, showMessage }: { onAnalyze: (text: string) =>
 
 function DataTimestampDisplay({ clusterDate, timezone, detectedTimezone }: { clusterDate: string | null; timezone: TimezoneMode; detectedTimezone: string | null }) {
     if (!clusterDate) {
-        return <p className="text-center text-gray-500">No timestamp found in data.</p>;
+        return <p className={`text-center ${TEXT_MUTED}`}>No timestamp found in data.</p>;
     }
 
     const relativeTime = getRelativeTimeString(clusterDate, timezone, detectedTimezone);
 
     return (
         <div className="text-center p-4">
-            <p className="text-lg font-semibold text-gray-800 font-mono">{clusterDate}</p>
-            {relativeTime && <p className="text-sm text-gray-500 mt-1">({relativeTime})</p>}
+            <p className={`text-lg font-semibold ${TEXT_PRIMARY} font-mono`}>{clusterDate}</p>
+            {relativeTime && <p className={`text-sm ${TEXT_MUTED} mt-1`}>({relativeTime})</p>}
         </div>
     );
 }
 
 function ConfigurationPane({ timezone, setTimezone, detectedTimezone, clusterDate }: { timezone: TimezoneMode; setTimezone: (tz: TimezoneMode) => void; detectedTimezone: string | null; clusterDate: string | null }) {
     return (
-        <div className="mt-6 border-t pt-6 max-w-6xl mx-auto">
+        <div className={`mt-6 border-t ${BORDER_SUBTLE} pt-6 max-w-6xl mx-auto`}>
             <div className="grid md:grid-cols-2 gap-6">
                 <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">Configuration</h3>
-                    <div className="p-4 bg-gray-50 rounded-lg space-y-6">
+                    <h3 className={`text-lg font-medium ${TEXT_HEADING} mb-4`}>Configuration</h3>
+                    <div className={`p-4 ${BG_INSET} rounded-lg space-y-6`}>
                         <div>
-                            <h4 className="text-md font-semibold text-gray-800 mb-2">Display & Timezone</h4>
+                            <h4 className={`text-md font-semibold ${TEXT_PRIMARY} mb-2`}>Display & Timezone</h4>
                             <div className="flex items-center space-x-2">
-                                <label htmlFor="timezone-selector" className="text-sm font-medium text-gray-700 w-32">Data Timestamp:</label>
+                                <label htmlFor="timezone-selector" className={`text-sm font-medium ${TEXT_SECONDARY} w-32`}>Data Timestamp:</label>
                                 <select
                                     id="timezone-selector"
                                     value={timezone}
                                     onChange={e => setTimezone(e.target.value as TimezoneMode)}
-                                    className="flex-1 h-8 rounded border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                    className={`flex-1 h-8 rounded bg-white border-gray-300 ${BORDER_SUBTLE} text-sm focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-700 dark:text-gray-200`}
                                 >
                                     <option value="auto" disabled={!detectedTimezone}>
                                         {detectedTimezone ? `Auto-Detect (${detectedTimezone})` : 'Auto-Detect (No date found)'}
@@ -157,21 +222,21 @@ function ConfigurationPane({ timezone, setTimezone, detectedTimezone, clusterDat
                         </div>
                     </div>
                     <div className="mt-6">
-                        <h3 className="text-lg font-medium text-gray-900 mb-4">Data Collection Time</h3>
-                        <div className="p-4 bg-gray-50 rounded-lg">
+                        <h3 className={`text-lg font-medium ${TEXT_HEADING} mb-4`}>Data Collection Time</h3>
+                        <div className={`p-4 ${BG_INSET} rounded-lg`}>
                             <DataTimestampDisplay clusterDate={clusterDate} timezone={timezone} detectedTimezone={detectedTimezone} />
                         </div>
                     </div>
                 </div>
                 <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">UI Legend</h3>
-                    <div className="p-4 bg-gray-50 rounded-lg text-sm space-y-2">
+                    <h3 className={`text-lg font-medium ${TEXT_HEADING} mb-4`}>UI Legend</h3>
+                    <div className={`p-4 ${BG_INSET} rounded-lg text-sm space-y-2`}>
                         <div className="flex items-center"><span className="inline-block bg-indigo-600 text-white font-semibold text-xs mr-1 mb-1 px-2 py-0.5 rounded-full">Partition</span><span className="ml-2">= Partition with active jobs on a node</span></div>
-                        <div className="flex items-center"><span className="inline-block bg-gray-200 text-gray-700 text-xs mr-1 mb-1 px-2 py-0.5 rounded-full">Partition</span><span className="ml-2">= Partition with no active jobs on a node</span></div>
-                        <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-orange-100 text-orange-800">ALLOCATED</span><span className="ml-2">= Node is fully allocated</span></div>
-                        <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-800">MIXED</span><span className="ml-2">= Node is partially allocated</span></div>
-                        <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-green-100 text-green-800">IDLE</span><span className="ml-2">= Node is idle</span></div>
-                        <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-red-100 text-red-800">DOWN/DRAIN</span><span className="ml-2">= Node is down, drained, or unavailable</span></div>
+                        <div className="flex items-center"><span className={`inline-block ${BG_CHIP} ${TEXT_SECONDARY} text-xs mr-1 mb-1 px-2 py-0.5 rounded-full`}>Partition</span><span className="ml-2">= Partition with no active jobs on a node</span></div>
+                        <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300">ALLOCATED</span><span className="ml-2">= Node is fully allocated</span></div>
+                        <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300">MIXED</span><span className="ml-2">= Node is partially allocated</span></div>
+                        <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300">IDLE</span><span className="ml-2">= Node is idle</span></div>
+                        <div className="flex items-center"><span className="text-sm font-semibold px-2 py-1 rounded-full bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300">DOWN/DRAIN</span><span className="ml-2">= Node is down, drained, or unavailable</span></div>
                     </div>
                 </div>
             </div>
@@ -188,7 +253,7 @@ function getGresBarColor(type: string): string {
 
 function CompactProgressBar({ value, color }: { value: number; color: string }) {
     return (
-        <div className="bg-gray-200 rounded-full h-2 w-full mt-1 overflow-hidden">
+        <div className={`${BG_CHIP} rounded-full h-2 w-full mt-1 overflow-hidden`}>
             <div className={`${color} h-2 rounded-full`} style={{ width: `${Math.min(value, 100)}%` }} />
         </div>
     );
@@ -205,34 +270,34 @@ function ClusterSummary({ partitions, nodes }: { partitions: Map<string, Partiti
         const cpuPct = row.cpuTotal > 0 ? (row.cpuAllocated / row.cpuTotal * 100) : 0;
         const memPct = row.memTotalMB > 0 ? (row.memAllocatedMB / row.memTotalMB * 100) : 0;
         const rowClass = isTotal
-            ? 'border-t-2 border-gray-300 bg-gray-50 font-bold'
-            : 'border-b border-gray-100 hover:bg-gray-50';
+            ? `border-t-2 border-gray-300 dark:border-gray-500 ${BG_INSET} font-bold`
+            : 'border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-white/5';
         const gresByType = new Map(row.gres.map(g => [g.type, g]));
 
         return (
             <tr key={row.partitionName} className={rowClass}>
                 <td className="px-3 py-2 whitespace-nowrap">{row.partitionName}</td>
                 <td className="px-3 py-2">
-                    <div>{row.nodesUp}/{row.nodesTotal}{row.nodesDown > 0 && <span className="text-red-600 ml-1">({row.nodesDown} down)</span>}</div>
+                    <div>{row.nodesUp}/{row.nodesTotal}{row.nodesDown > 0 && <span className="text-red-600 dark:text-red-400 ml-1">({row.nodesDown} down)</span>}</div>
                     <CompactProgressBar value={row.nodesTotal > 0 ? (row.nodesUp / row.nodesTotal * 100) : 0} color="bg-gray-500" />
                 </td>
                 <td className="px-3 py-2">
-                    <div>{row.cpuAllocated.toLocaleString()}/{row.cpuTotal.toLocaleString()} <span className="text-gray-500">({cpuPct.toFixed(0)}%)</span></div>
+                    <div>{row.cpuAllocated.toLocaleString()}/{row.cpuTotal.toLocaleString()} <span className={TEXT_MUTED}>({cpuPct.toFixed(0)}%)</span></div>
                     <CompactProgressBar value={cpuPct} color="bg-blue-500" />
                 </td>
                 <td className="px-3 py-2">
-                    <div>{formatMemoryMB(row.memAllocatedMB)}/{formatMemoryMB(row.memTotalMB)} <span className="text-gray-500">({memPct.toFixed(0)}%)</span></div>
+                    <div>{formatMemoryMB(row.memAllocatedMB)}/{formatMemoryMB(row.memTotalMB)} <span className={TEXT_MUTED}>({memPct.toFixed(0)}%)</span></div>
                     <CompactProgressBar value={memPct} color="bg-green-500" />
                 </td>
                 {allGresTypes.map(type => {
                     const gres = gresByType.get(type);
                     if (!gres || gres.total === 0) {
-                        return <td key={type} className="px-3 py-2"><span className="text-gray-400">—</span></td>;
+                        return <td key={type} className="px-3 py-2"><span className="text-gray-400 dark:text-gray-500">&mdash;</span></td>;
                     }
                     const pct = gres.allocated / gres.total * 100;
                     return (
                         <td key={type} className="px-3 py-2">
-                            <div>{gres.allocated}/{gres.total} <span className="text-gray-500">({pct.toFixed(0)}%)</span></div>
+                            <div>{gres.allocated}/{gres.total} <span className={TEXT_MUTED}>({pct.toFixed(0)}%)</span></div>
                             <CompactProgressBar value={pct} color={getGresBarColor(type)} />
                         </td>
                     );
@@ -243,11 +308,11 @@ function ClusterSummary({ partitions, nodes }: { partitions: Map<string, Partiti
 
     return (
         <div className="max-w-7xl mx-auto mt-6">
-            <div className="bg-white p-6 rounded-lg shadow-md">
-                <h2 className="text-xl font-bold text-gray-800 mb-4">Cluster Resource Summary</h2>
+            <div className={`${BG_CARD} p-6 rounded-lg shadow-md`}>
+                <h2 className={`text-xl font-bold ${TEXT_PRIMARY} mb-4`}>Cluster Resource Summary</h2>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left">
-                        <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
+                        <thead className={`${BG_INSET} text-xs ${TEXT_SECONDARY} uppercase`}>
                             <tr>
                                 <th className="px-3 py-3">Partition</th>
                                 <th className="px-3 py-3">Nodes</th>
@@ -273,7 +338,7 @@ function TabButton({ tabId, activeTab, onClick, children }: { tabId: string; act
     return (
         <button
             type="button"
-            className={`tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm cursor-pointer ${activeTab === tabId ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}
+            className={`tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm cursor-pointer ${activeTab === tabId ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' : `border-transparent ${TEXT_MUTED} hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500`}`}
             onClick={() => onClick(tabId)}
         >
             {children}
@@ -282,30 +347,30 @@ function TabButton({ tabId, activeTab, onClick, children }: { tabId: string; act
 }
 
 function PartitionsTab({ partitions }: { partitions: Map<string, PartitionData> }) {
-    if (partitions.size === 0) return <p className="text-center text-gray-500">No partition data found.</p>;
+    if (partitions.size === 0) return <p className={`text-center ${TEXT_MUTED}`}>No partition data found.</p>;
 
     const sortedPartitions = Array.from(partitions.entries()).sort((a, b) => a[0].localeCompare(b[0]));
 
     return (
         <div className="space-y-6">
             {sortedPartitions.map(([name, { details, nodes }]) => (
-                <div key={name} className="bg-white p-6 rounded-lg shadow-md">
-                    <div className="flex items-center border-b pb-3 mb-4">
-                        <h2 className="text-xl font-bold text-gray-800">{name}</h2>
-                        {details.Default === 'YES' && <span className="ml-3 bg-yellow-200 text-yellow-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">Default</span>}
+                <div key={name} className={`${BG_CARD} p-6 rounded-lg shadow-md`}>
+                    <div className={`flex items-center border-b ${BORDER_SUBTLE} pb-3 mb-4`}>
+                        <h2 className={`text-xl font-bold ${TEXT_PRIMARY}`}>{name}</h2>
+                        {details.Default === 'YES' && <span className="ml-3 bg-yellow-200 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300 text-xs font-semibold px-2.5 py-0.5 rounded-full">Default</span>}
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
-                        <div><strong className="block text-gray-500">State</strong><span className="font-semibold">{details.State}</span></div>
-                        <div><strong className="block text-gray-500">Total Nodes</strong><span className="font-semibold">{details.TotalNodes}</span></div>
-                        <div><strong className="block text-gray-500">Total CPUs</strong><span className="font-semibold">{details.TotalCPUs}</span></div>
-                        <div><strong className="block text-gray-500">Max Time</strong><span className="font-semibold">{details.MaxTime}</span></div>
+                        <div><strong className={`block ${TEXT_MUTED}`}>State</strong><span className="font-semibold">{details.State}</span></div>
+                        <div><strong className={`block ${TEXT_MUTED}`}>Total Nodes</strong><span className="font-semibold">{details.TotalNodes}</span></div>
+                        <div><strong className={`block ${TEXT_MUTED}`}>Total CPUs</strong><span className="font-semibold">{details.TotalCPUs}</span></div>
+                        <div><strong className={`block ${TEXT_MUTED}`}>Max Time</strong><span className="font-semibold">{details.MaxTime}</span></div>
                     </div>
                     <div>
-                        <h3 className="text-md font-semibold text-gray-700 mb-2">Nodes ({nodes.size})</h3>
+                        <h3 className={`text-md font-semibold ${TEXT_SECONDARY} mb-2`}>Nodes ({nodes.size})</h3>
                         <div className="flex flex-wrap">
                             {nodes.size > 0 ? Array.from(nodes).sort().map(node => (
-                                <span key={node} className="inline-block bg-gray-200 text-gray-800 text-xs font-medium mr-2 mb-2 px-2.5 py-0.5 rounded-full">{node}</span>
-                            )) : <p className="text-gray-500">No nodes listed.</p>}
+                                <span key={node} className={`inline-block ${BG_CHIP} ${TEXT_PRIMARY} text-xs font-medium mr-2 mb-2 px-2.5 py-0.5 rounded-full`}>{node}</span>
+                            )) : <p className={TEXT_MUTED}>No nodes listed.</p>}
                         </div>
                     </div>
                 </div>
@@ -316,7 +381,7 @@ function PartitionsTab({ partitions }: { partitions: Map<string, PartitionData> 
 
 function ProgressBar({ value, color = 'bg-blue-500' }: { value: number; color?: string }) {
     return (
-        <div className="bg-gray-200 rounded-full h-4 w-full overflow-hidden">
+        <div className={`${BG_CHIP} rounded-full h-4 w-full overflow-hidden`}>
             <div className={`${color} h-4 rounded-full`} style={{ width: `${value}%` }}></div>
         </div>
     );
@@ -327,7 +392,7 @@ function Tooltip({ text, children }: { text: string; children: ReactNode }) {
         <div className="group relative inline-block">
             {children}
             <span className="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity duration-300
-                             w-64 bg-gray-800 text-white text-center text-xs rounded-lg py-2 px-3
+                             w-64 bg-gray-800 dark:bg-gray-600 text-white text-center text-xs rounded-lg py-2 px-3
                              absolute z-10 bottom-full left-1/2 -ml-32">
                 {text}
             </span>
@@ -376,7 +441,7 @@ function GresResourceDisplay({ details }: { details: Record<string, string> }) {
                                 </Tooltip>
                             </div>
                             <ProgressBar value={pct} color={getGresBarColor(baseType)} />
-                            <div className="ml-4 mt-2 pl-4 border-l-2 border-gray-200 space-y-2">
+                            <div className={`ml-4 mt-2 pl-4 border-l-2 border-gray-200 ${BORDER_SUBTLE} space-y-2`}>
                                 {subtypes.map(key => {
                                     const subTotal = parseUnitValue(cfgTRES.gres[key] ?? String(configuredGres[key] ?? '0'));
                                     const subAlloc = parseUnitValue(allocTRES.gres[key] ?? '0');
@@ -412,11 +477,11 @@ function GresResourceDisplay({ details }: { details: Record<string, string> }) {
 }
 
 function getNodeStateColor(state: string): string {
-    if (state.includes('DOWN') || state.includes('DRAIN')) return 'bg-red-100 text-red-800';
-    if (state.includes('ALLOCATED')) return 'bg-orange-100 text-orange-800';
-    if (state.includes('MIXED')) return 'bg-blue-100 text-blue-800';
-    if (state.includes('IDLE')) return 'bg-green-100 text-green-800';
-    return 'bg-gray-100 text-gray-800';
+    if (state.includes('DOWN') || state.includes('DRAIN')) return 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300';
+    if (state.includes('ALLOCATED')) return 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-300';
+    if (state.includes('MIXED')) return 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300';
+    if (state.includes('IDLE')) return 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300';
+    return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
 }
 
 function NodeCard({ name, details, jobs }: { name: string; details: Record<string, string>; jobs: SlurmQueueItem[] }) {
@@ -435,7 +500,7 @@ function NodeCard({ name, details, jobs }: { name: string; details: Record<strin
     const activePartitions = new Set(jobs.map((j) => j.Partition));
 
     return (
-        <div className="bg-white p-4 rounded-lg shadow-md flex flex-col space-y-3">
+        <div className={`${BG_CARD} p-4 rounded-lg shadow-md flex flex-col space-y-3`}>
             <div className="flex justify-between items-center">
                 <h3 className="font-bold text-lg">{name}</h3>
                 <span className={`text-sm font-semibold px-2 py-1 rounded-full ${stateColor}`}>{details.State}</span>
@@ -449,29 +514,29 @@ function NodeCard({ name, details, jobs }: { name: string; details: Record<strin
                 <ProgressBar value={memPct} color="bg-green-500" />
             </div>
             <GresResourceDisplay details={details} />
-            <div className="pt-2 border-t border-gray-200 mt-2">
-                <h4 className="text-xs font-bold text-gray-500 mb-1 uppercase">Partitions</h4>
+            <div className={`pt-2 border-t border-gray-200 ${BORDER_SUBTLE} mt-2`}>
+                <h4 className={`text-xs font-bold ${TEXT_MUTED} mb-1 uppercase`}>Partitions</h4>
                 <div className="flex flex-wrap">
                     {(details.Partitions ?? '').split(',').map((p) => (
-                        <span key={p} className={`inline-block ${activePartitions.has(p) ? 'bg-indigo-600 text-white font-semibold' : 'bg-gray-200 text-gray-700'} text-xs mr-1 mb-1 px-2 py-0.5 rounded-full`}>{p}</span>
+                        <span key={p} className={`inline-block ${activePartitions.has(p) ? 'bg-indigo-600 text-white font-semibold' : `${BG_CHIP} ${TEXT_SECONDARY}`} text-xs mr-1 mb-1 px-2 py-0.5 rounded-full`}>{p}</span>
                     ))}
                 </div>
             </div>
             {jobs.length > 0 && (
-                <div className="pt-2 border-t border-gray-200 mt-2">
-                    <h4 className="text-xs font-bold text-gray-500 mb-2 uppercase">Active Jobs</h4>
+                <div className={`pt-2 border-t border-gray-200 ${BORDER_SUBTLE} mt-2`}>
+                    <h4 className={`text-xs font-bold ${TEXT_MUTED} mb-2 uppercase`}>Active Jobs</h4>
                     <div className="space-y-1">
                         {jobs.map((job) => {
                             const tresString = job.details?.AllocTRES && job.details.AllocTRES !== '(null)' ? job.details.AllocTRES : job.details?.TRES;
                             const tres = parseTRES(tresString ?? '');
                             return (
-                                <div key={job.JobId} className="text-xs p-2 bg-gray-50 rounded">
+                                <div key={job.JobId} className={`text-xs p-2 ${BG_INSET} rounded`}>
                                     <div>
                                         <span className="font-mono font-semibold">{job.JobId}</span>
-                                        <span className="font-medium text-gray-600"> ({job.User})</span>
-                                        <span className="font-medium text-indigo-700 float-right">{job.Partition}</span>
+                                        <span className={`font-medium ${TEXT_SUBDUED}`}> ({job.User})</span>
+                                        <span className="font-medium text-indigo-700 dark:text-indigo-400 float-right">{job.Partition}</span>
                                     </div>
-                                    <div className="text-gray-600 mt-1 flex space-x-3 flex-wrap">
+                                    <div className={`${TEXT_SUBDUED} mt-1 flex space-x-3 flex-wrap`}>
                                         <span><strong className="font-semibold">CPU:</strong> {tres.cpu}</span>
                                         <span><strong className="font-semibold">Mem:</strong> {tres.mem}</span>
                                         {Object.entries(tres.gres).map(([key, val]) => (
@@ -506,7 +571,7 @@ function NodesTab({ nodes, queue }: { nodes: Map<string, NodeData>; queue: Slurm
         return map;
     }, [nodes, queue]);
 
-    if (nodes.size === 0) return <p className="text-center text-gray-500 col-span-full">No node data found.</p>;
+    if (nodes.size === 0) return <p className={`text-center ${TEXT_MUTED} col-span-full`}>No node data found.</p>;
 
     const sortedNodes = Array.from(nodes.entries()).sort((a, b) => a[0].localeCompare(b[0]));
 
@@ -567,7 +632,7 @@ function JobDetails({ job, isHistory }: { job: SlurmQueueItem | SlurmHistoryItem
                     <>
                         <h4 className="font-bold mt-4 mb-2">Job Steps:</h4>
                         <table className="w-full text-left">
-                            <thead className="text-xs text-gray-500">
+                            <thead className={`text-xs ${TEXT_MUTED}`}>
                                 <tr>
                                     <th className="px-4 py-1 pl-6">Step ID</th>
                                     <th className="px-4 py-1">Name</th>
@@ -577,7 +642,7 @@ function JobDetails({ job, isHistory }: { job: SlurmQueueItem | SlurmHistoryItem
                             </thead>
                             <tbody>
                                 {historyJob.steps.map((step) => (
-                                    <tr key={step.JobID} className="text-xs text-gray-600">
+                                    <tr key={step.JobID} className={`text-xs ${TEXT_SUBDUED}`}>
                                         <td className="px-4 py-1 pl-6 font-mono">{step.JobID}</td>
                                         <td className="px-4 py-1 font-mono">{step.JobName}</td>
                                         <td className="px-4 py-1">{step.State}</td>
@@ -613,27 +678,27 @@ function JobDetails({ job, isHistory }: { job: SlurmQueueItem | SlurmHistoryItem
 }
 
 const JOB_STATE_COLORS: Record<string, string> = {
-    RUNNING: 'text-green-600',
-    R: 'text-green-600',
-    PENDING: 'text-yellow-600',
-    PD: 'text-yellow-600',
-    COMPLETED: 'text-blue-600',
-    FAILED: 'text-red-600',
-    TIMEOUT: 'text-red-600',
-    CANCELLED: 'text-red-600',
-    OUT_OF_MEMORY: 'text-red-600',
+    RUNNING: 'text-green-600 dark:text-green-400',
+    R: 'text-green-600 dark:text-green-400',
+    PENDING: 'text-yellow-600 dark:text-yellow-400',
+    PD: 'text-yellow-600 dark:text-yellow-400',
+    COMPLETED: 'text-blue-600 dark:text-blue-400',
+    FAILED: 'text-red-600 dark:text-red-400',
+    TIMEOUT: 'text-red-600 dark:text-red-400',
+    CANCELLED: 'text-red-600 dark:text-red-400',
+    OUT_OF_MEMORY: 'text-red-600 dark:text-red-400',
 };
 
 function getJobStateColor(state: string): string {
     for (const [prefix, color] of Object.entries(JOB_STATE_COLORS)) {
         if (state.startsWith(prefix)) return color;
     }
-    return 'text-gray-600';
+    return TEXT_SUBDUED;
 }
 
 function JobTableHeader() {
     return (
-        <thead className="bg-gray-50 text-xs text-gray-700 uppercase">
+        <thead className={`${BG_INSET} text-xs ${TEXT_SECONDARY} uppercase`}>
             <tr>
                 <th className="px-2 py-3 w-4"></th>
                 <th className="px-4 py-3">Job ID</th>
@@ -679,7 +744,7 @@ function JobRow({ job, isHistory = false, timezoneMode, detectedTimezone }: JobR
 
     return (
         <>
-            <tr className={`border-b hover:bg-gray-50 ${hasDetails ? 'cursor-pointer' : ''}`} onClick={() => hasDetails && setIsExpanded(!isExpanded)}>
+            <tr className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 ${hasDetails ? 'cursor-pointer' : ''}`} onClick={() => hasDetails && setIsExpanded(!isExpanded)}>
                 <td className="px-2 py-2 text-center">{hasDetails && <span className={`arrow inline-block transition-transform ${isExpanded ? 'rotate-90' : ''}`}>&#9654;</span>}</td>
                 <td className="px-4 py-2 font-mono">{jobId}</td>
                 <td className="px-4 py-2">{job.User}</td>
@@ -688,15 +753,15 @@ function JobRow({ job, isHistory = false, timezoneMode, detectedTimezone }: JobR
                 <td className="px-4 py-2 font-mono">{jobName}</td>
                 <td className="px-4 py-2">
                     {startTime}
-                    {relativeStartTime && <><br /><span className="text-xs text-gray-500">{relativeStartTime}</span></>}
+                    {relativeStartTime && <><br /><span className={`text-xs ${TEXT_MUTED}`}>{relativeStartTime}</span></>}
                 </td>
                 <td className="px-4 py-2">
                     {endTime}
-                    {relativeEndTime && <><br /><span className="text-xs text-gray-500">{relativeEndTime}</span></>}
+                    {relativeEndTime && <><br /><span className={`text-xs ${TEXT_MUTED}`}>{relativeEndTime}</span></>}
                 </td>
             </tr>
             {isExpanded && hasDetails && (
-                <tr className="bg-gray-50">
+                <tr className={BG_INSET}>
                     <td colSpan={8} className="p-4">
                         <JobDetails job={job} isHistory={isHistory} />
                     </td>
@@ -707,10 +772,10 @@ function JobRow({ job, isHistory = false, timezoneMode, detectedTimezone }: JobR
 }
 
 function QueueTab({ queue, timezoneMode, detectedTimezone }: { queue: SlurmQueueItem[]; timezoneMode: TimezoneMode; detectedTimezone: string | null }) {
-    if (queue.length === 0) return <p className="text-center text-gray-500">No queue data found.</p>;
+    if (queue.length === 0) return <p className={`text-center ${TEXT_MUTED}`}>No queue data found.</p>;
 
     return (
-        <div className="bg-white p-4 rounded-lg shadow-md overflow-x-auto">
+        <div className={`${BG_CARD} p-4 rounded-lg shadow-md overflow-x-auto`}>
             <table className="w-full text-sm text-left">
                 <JobTableHeader />
                 <tbody>
@@ -734,15 +799,15 @@ function HistoryTab({ history, timezoneMode, detectedTimezone }: { history: Slur
         );
     }, [history, filter]);
 
-    if (history.length === 0) return <p className="text-center text-gray-500">No history data found.</p>;
+    if (history.length === 0) return <p className={`text-center ${TEXT_MUTED}`}>No history data found.</p>;
 
     return (
-        <div className="bg-white p-4 rounded-lg shadow-md overflow-x-auto">
+        <div className={`${BG_CARD} p-4 rounded-lg shadow-md overflow-x-auto`}>
             <div className="mb-4">
                 <input
                     type="text"
                     placeholder="Filter by Job ID, Name, or User..."
-                    className="w-full p-2 border border-gray-300 rounded-md"
+                    className={`w-full p-2 border border-gray-300 ${BORDER_SUBTLE} rounded-md dark:bg-gray-700 dark:text-gray-200`}
                     value={filter}
                     onChange={e => setFilter(e.target.value)}
                 />
@@ -761,6 +826,7 @@ function HistoryTab({ history, timezoneMode, detectedTimezone }: { history: Slur
 // --- MAIN APP COMPONENT ---
 
 function App() {
+    const { theme, setTheme } = useTheme();
     const [slurmData, setSlurmData] = useState<SlurmData | null>(null);
     const [activeTab, setActiveTab] = useState('nodes');
     const [message, setMessage] = useState('');
@@ -795,10 +861,10 @@ function App() {
     }
 
     return (
-        <div className="bg-gray-100 text-gray-800 font-sans">
+        <div className="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans min-h-screen">
             <div className="container mx-auto p-4 md:p-6">
                 <MessageBox message={message} type={messageType} onDismiss={() => setMessage('')} />
-                <Header />
+                <Header theme={theme} setTheme={setTheme} />
                 <main>
                     <InputSection onAnalyze={handleAnalyze} showMessage={showMessage} />
 
@@ -812,7 +878,7 @@ function App() {
                             />
                             <ClusterSummary partitions={slurmData.partitions} nodes={slurmData.nodes} />
                             <div id="dashboard-tabs" className="max-w-7xl mx-auto mt-6">
-                                <div className="border-b border-gray-200 mb-6">
+                                <div className={`border-b border-gray-200 ${BORDER_SUBTLE} mb-6`}>
                                     <nav className="flex -mb-px space-x-6" aria-label="Tabs">
                                         <TabButton tabId="partitions" activeTab={activeTab} onClick={setActiveTab}>Partitions</TabButton>
                                         <TabButton tabId="nodes" activeTab={activeTab} onClick={setActiveTab}>Node Details</TabButton>
