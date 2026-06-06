@@ -339,6 +339,10 @@ export function detectAndParseAll(rawData: string): SlurmData {
     const nodes = new Map<string, NodeData>();
     for (const line of nodeLines) {
         const details = parseKeyValueString(line);
+        // Reason is the last field of a node line and may contain spaces,
+        // which the naive key=value split truncates.
+        const reasonMatch = / Reason=(.+)$/.exec(line);
+        if (reasonMatch) details.Reason = reasonMatch[1];
         if (details.NodeName) {
             nodes.set(details.NodeName, { details });
         }

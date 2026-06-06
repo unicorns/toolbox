@@ -81,3 +81,65 @@ export interface ClusterResourceSummary {
   partitions: PartitionResourceSummary[];
   totals: PartitionResourceSummary;
 }
+
+/** total/allocated count all nodes; free counts only schedulable nodes. */
+export interface ResourcePool {
+  total: number;
+  allocated: number;
+  free: number;
+}
+
+export interface UnavailableNode {
+  name: string;
+  state: string;
+  reason: string | null;
+}
+
+export interface PartitionCapacity {
+  name: string;
+  /** null when the partition has no GPUs configured. */
+  gpu: ResourcePool | null;
+  cpu: ResourcePool;
+  memMB: ResourcePool;
+  nodesTotal: number;
+  nodesIdle: number;
+  /** Largest free GPU count on a single schedulable node. */
+  largestFreeGpuBlock: number;
+  unavailable: UnavailableNode[];
+  pendingJobs: number;
+  pendingGpus: number;
+  pendingCpus: number;
+}
+
+export interface ClusterTotals {
+  gpu: ResourcePool;
+  cpu: ResourcePool;
+  memMB: ResourcePool;
+  nodesTotal: number;
+  nodesIdle: number;
+  nodesUnavailable: number;
+}
+
+export interface UserUsage {
+  user: string;
+  jobCount: number;
+  nodeCount: number;
+  gpus: number;
+  cpus: number;
+  memMB: number;
+  /** StartTime of the user's oldest running job (raw Slurm timestamp). */
+  oldestStart: string | null;
+  jobs: SlurmQueueItem[];
+}
+
+export interface QueueStats {
+  total: number;
+  running: number;
+  pending: number;
+  other: number;
+}
+
+export interface HistoryStateCount {
+  state: string;
+  count: number;
+}
