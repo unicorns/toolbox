@@ -43,13 +43,6 @@ export interface SlurmHistoryItem {
   steps?: SlurmHistoryItem[];
 }
 
-export interface JobRowProps {
-  job: SlurmQueueItem | SlurmHistoryItem;
-  isHistory: boolean;
-  timezoneMode: TimezoneMode;
-  detectedTimezone: string | null;
-}
-
 export interface SlurmData {
   partitions: Map<string, PartitionData>;
   nodes: Map<string, NodeData>;
@@ -57,29 +50,6 @@ export interface SlurmData {
   history: SlurmHistoryItem[];
   clusterDate: string | null;
   detectedTimezone: string | null;
-}
-
-export interface GresTypeSummary {
-  type: string;
-  total: number;
-  allocated: number;
-}
-
-export interface PartitionResourceSummary {
-  partitionName: string;
-  nodesTotal: number;
-  nodesUp: number;
-  nodesDown: number;
-  cpuTotal: number;
-  cpuAllocated: number;
-  memTotalMB: number;
-  memAllocatedMB: number;
-  gres: GresTypeSummary[];
-}
-
-export interface ClusterResourceSummary {
-  partitions: PartitionResourceSummary[];
-  totals: PartitionResourceSummary;
 }
 
 /** total/allocated count all nodes; free counts only schedulable nodes. */

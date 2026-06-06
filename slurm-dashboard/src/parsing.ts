@@ -1,4 +1,4 @@
-import type { SlurmData, SlurmQueueItem, SlurmHistoryItem, TresResources, TimezoneMode, PartitionData, NodeData, PartitionResourceSummary, ClusterResourceSummary, GresTypeSummary } from './types';
+import type { SlurmData, SlurmQueueItem, SlurmHistoryItem, TresResources, TimezoneMode, PartitionData, NodeData } from './types';
 
 // --- CONSTANTS ---
 
@@ -186,102 +186,6 @@ export function formatMemoryMB(mb: number): string {
     if (mb >= 1024 * 1024) return `${(mb / (1024 * 1024)).toFixed(1)} TiB`;
     if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GiB`;
     return `${mb.toFixed(0)} MiB`;
-}
-
-function getGresTotal(key: string, cfgTRES: TresResources, configuredGres: Record<string, number>): number {
-    if (cfgTRES.gres[key] != null) return parseUnitValue(cfgTRES.gres[key]);
-    return configuredGres[key] ?? 0;
-}
-
-function getGresAlloc(key: string, allocTRES: TresResources): number {
-    return parseUnitValue(allocTRES.gres[key] ?? '0');
-}
-
-function aggregateNodeResources(
-    nodeNames: Iterable<string>,
-    nodes: Map<string, NodeData>,
-): Omit<PartitionResourceSummary, 'partitionName'> {
-    let nodesTotal = 0, nodesUp = 0, nodesDown = 0;
-    let cpuTotal = 0, cpuAllocated = 0;
-    let memTotalMB = 0, memAllocatedMB = 0;
-    const gresMap = new Map<string, { total: number; allocated: number }>();
-
-    for (const nodeName of nodeNames) {
-        const node = nodes.get(nodeName);
-        if (!node) continue;
-        const details = node.details;
-
-        nodesTotal++;
-        const state = details.State ?? '';
-        if (state.includes('DOWN') || state.includes('DRAIN')) {
-            nodesDown++;
-        } else {
-            nodesUp++;
-        }
-
-        const cfgTRES = parseTRES(details.CfgTRES ?? '');
-        const allocTRES = parseTRES(details.AllocTRES ?? '');
-
-        cpuTotal += parseInt(cfgTRES.cpu || details.CPUTot || '0') || 0;
-        cpuAllocated += parseInt(allocTRES.cpu || details.CPUAlloc || '0') || 0;
-        memTotalMB += parseMemoryToMB(cfgTRES.mem || details.RealMemory);
-        memAllocatedMB += parseMemoryToMB(allocTRES.mem || details.AllocMem);
-
-        const configuredGres = parseGresField(details.Gres ?? '');
-        const allGresKeys = new Set([
-            ...Object.keys(cfgTRES.gres),
-            ...Object.keys(allocTRES.gres),
-            ...Object.keys(configuredGres),
-        ]);
-
-        for (const key of allGresKeys) {
-            const total = getGresTotal(key, cfgTRES, configuredGres);
-            const alloc = getGresAlloc(key, allocTRES);
-            if (total === 0 && alloc === 0) continue;
-            const existing = gresMap.get(key) ?? { total: 0, allocated: 0 };
-            gresMap.set(key, {
-                total: existing.total + total,
-                allocated: existing.allocated + alloc,
-            });
-        }
-    }
-
-    const gres: GresTypeSummary[] = Array.from(gresMap.entries())
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([type, { total, allocated }]) => ({ type, total, allocated }));
-
-    return {
-        nodesTotal, nodesUp, nodesDown,
-        cpuTotal, cpuAllocated,
-        memTotalMB, memAllocatedMB,
-        gres,
-    };
-}
-
-export function computeClusterSummary(
-    partitions: Map<string, PartitionData>,
-    nodes: Map<string, NodeData>,
-): ClusterResourceSummary {
-    const partitionSummaries: PartitionResourceSummary[] = Array.from(partitions.entries())
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([name, partition]) => ({
-            partitionName: name,
-            ...aggregateNodeResources(partition.nodes, nodes),
-        }));
-
-    const allNodeNames = new Set<string>();
-    for (const partition of partitions.values()) {
-        for (const node of partition.nodes) {
-            allNodeNames.add(node);
-        }
-    }
-
-    const totals: PartitionResourceSummary = {
-        partitionName: 'Total',
-        ...aggregateNodeResources(allNodeNames, nodes),
-    };
-
-    return { partitions: partitionSummaries, totals };
 }
 
 export function detectAndParseAll(rawData: string): SlurmData {

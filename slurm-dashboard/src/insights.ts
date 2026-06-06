@@ -31,10 +31,10 @@ function sumGpuEntries(entries: Record<string, number>): number {
 }
 
 export function getNodeGpuUsage(details: Record<string, string>): { total: number; allocated: number } | null {
-    const cfgGpu = parseTRES(details.CfgTRES ?? '').gres['gpu'];
+    const cfgGpu = parseTRES(details.CfgTRES ?? '').gres.gpu;
     const total = cfgGpu != null ? parseUnitValue(cfgGpu) : sumGpuEntries(parseGresField(details.Gres ?? ''));
     if (total === 0) return null;
-    const allocated = parseUnitValue(parseTRES(details.AllocTRES ?? '').gres['gpu'] ?? '0');
+    const allocated = parseUnitValue(parseTRES(details.AllocTRES ?? '').gres.gpu ?? '0');
     return { total, allocated };
 }
 
@@ -159,7 +159,7 @@ export function computePartitionCapacity(
                 if (!isPending(job) || !job.Partition.split(',').includes(name)) continue;
                 pendingJobs++;
                 const req = parseTRES(job.details?.ReqTRES ?? '');
-                pendingGpus += parseUnitValue(req.gres['gpu'] ?? '0');
+                pendingGpus += parseUnitValue(req.gres.gpu ?? '0');
                 pendingCpus += parseInt(req.cpu) || 0;
             }
 
@@ -216,7 +216,7 @@ export function computeUserUsage(queue: SlurmQueueItem[]): UserUsage[] {
         for (const node of expandNodeList(job.NodeList ?? '')) usage.nodes.add(node);
 
         const tres = parseTRES(job.details?.AllocTRES ?? '');
-        usage.gpus += parseUnitValue(tres.gres['gpu'] ?? '0');
+        usage.gpus += parseUnitValue(tres.gres.gpu ?? '0');
         usage.cpus += parseInt(tres.cpu) || 0;
         usage.memMB += parseMemoryToMB(tres.mem);
 
@@ -239,6 +239,15 @@ export function computeQueueStats(queue: SlurmQueueItem[]): QueueStats {
         else other++;
     }
     return { total: queue.length, running, pending, other };
+}
+
+/** Parses Slurm durations (`[d-]hh:mm:ss` or `mm:ss`); null for UNLIMITED etc. */
+export function parseDurationSeconds(duration: string): number | null {
+    const match = /^(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+)$/.exec(duration);
+    if (!match) return null;
+    const [, days, hours, minutes, seconds] = match;
+    return (parseInt(days ?? '0') * 24 + parseInt(hours ?? '0')) * 3600
+        + parseInt(minutes) * 60 + parseInt(seconds);
 }
 
 /** `CANCELLED by <uid>` collapses to CANCELLED so the chips stay tidy. */

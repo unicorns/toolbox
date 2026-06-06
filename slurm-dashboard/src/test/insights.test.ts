@@ -283,6 +283,23 @@ describe('computeHistoryStats', () => {
     });
 });
 
+describe('parseDurationSeconds', () => {
+    it('parses slurm duration formats', async () => {
+        const { parseDurationSeconds } = await import('../insights');
+        expect(parseDurationSeconds('10:34')).toBe(634);
+        expect(parseDurationSeconds('1:36:51')).toBe(5811);
+        expect(parseDurationSeconds('2-00:00:00')).toBe(172800);
+        expect(parseDurationSeconds('15-01:23:32')).toBe(1301012);
+    });
+
+    it('returns null for unlimited or non-durations', async () => {
+        const { parseDurationSeconds } = await import('../insights');
+        expect(parseDurationSeconds('UNLIMITED')).toBeNull();
+        expect(parseDurationSeconds('')).toBeNull();
+        expect(parseDurationSeconds('N/A')).toBeNull();
+    });
+});
+
 describe('node Reason extraction', () => {
     it('captures multi-word drain reasons from scontrol node lines', () => {
         const raw = 'NodeName=g3 Arch=x86_64 CPUAlloc=0 CPUTot=256 State=IDLE+DRAIN Partitions=gpu CfgTRES=cpu=256,mem=1400000M AllocTRES= CurrentWatts=0 AveWatts=0 Reason=Kill task failed [root@2026-06-01T10:00:00]';
