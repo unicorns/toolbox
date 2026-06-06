@@ -190,8 +190,9 @@ export function QueueTab({ queue, timezoneMode, detectedTimezone }: QueueTabProp
                                             {job.JobId}
                                         </td>
                                         <td className="py-2 pr-4">{job.User}</td>
-                                        <td className="max-w-56 truncate py-2 pr-4" title={job.Name}>{job.Name}</td>
-                                        <td className={`py-2 pr-4 ${TEXT_MUTED}`}>{job.Partition}</td>
+                                        {/* squeue truncates name/partition columns; scontrol details carry full values */}
+                                        <td className="max-w-56 truncate py-2 pr-4" title={job.details?.JobName ?? job.Name}>{job.details?.JobName ?? job.Name}</td>
+                                        <td className={`py-2 pr-4 ${TEXT_MUTED}`}>{job.details?.Partition ?? job.Partition}</td>
                                         <td className="py-2 pr-4 whitespace-nowrap">{resourceSummary(job)}</td>
                                         <td className="py-2 pr-4"><RuntimeCell job={job} /></td>
                                         <td className={`py-2 pr-4 font-semibold ${jobStateColor(job.State)}`}>

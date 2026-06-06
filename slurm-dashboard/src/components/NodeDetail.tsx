@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import type { SlurmQueueItem } from '../types';
 import { parseTRES, parseMemoryToMB, parseUnitValue, parseGresField, expandNodeList, formatMemoryMB } from '../parsing';
-import { isNodeUnhealthy } from '../insights';
-import { BG_INSET, BORDER, TEXT_MUTED, TEXT_PRIMARY, nodeStateKind, NODE_STATE_BADGE } from './theme';
+import { nodeStateKind } from '../insights';
+import { BG_INSET, BORDER, TEXT_MUTED, TEXT_PRIMARY, NODE_STATE_BADGE } from './theme';
 import { ProgressBar, Tooltip } from './ui';
 
 function getGresBarColor(type: string): string {
@@ -106,7 +106,7 @@ export function NodeDetail({ name, details, queue, onClose }: NodeDetailProps) {
     const memAlloc = parseMemoryToMB(allocTRES.mem || details.AllocMem);
 
     const state = details.State ?? '';
-    const badge = NODE_STATE_BADGE[nodeStateKind(state, isNodeUnhealthy(state))];
+    const badge = NODE_STATE_BADGE[nodeStateKind(state)];
 
     return (
         <section
@@ -168,7 +168,7 @@ export function NodeDetail({ name, details, queue, onClose }: NodeDetailProps) {
                                         <div className={`mt-0.5 truncate ${TEXT_MUTED}`}>{job.Name}</div>
                                         <div className={`mt-0.5 flex flex-wrap gap-x-3 ${TEXT_MUTED}`}>
                                             <span>cpu {tres.cpu}</span>
-                                            <span>mem {tres.mem}</span>
+                                            <span>mem {tres.mem !== 'N/A' ? formatMemoryMB(parseMemoryToMB(tres.mem)) : tres.mem}</span>
                                             {Object.entries(tres.gres)
                                                 .filter(([key]) => !key.includes(':'))
                                                 .map(([key, val]) => <span key={key}>{key} {val}</span>)}

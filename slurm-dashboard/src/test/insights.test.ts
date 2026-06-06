@@ -283,6 +283,41 @@ describe('computeHistoryStats', () => {
     });
 });
 
+describe('nodeStateKind', () => {
+    it('classifies plain scheduling states', async () => {
+        const { nodeStateKind } = await import('../insights');
+        expect(nodeStateKind('IDLE')).toBe('idle');
+        expect(nodeStateKind('MIXED')).toBe('mixed');
+        expect(nodeStateKind('ALLOCATED')).toBe('allocated');
+        expect(nodeStateKind('ALLOCATED+COMPLETING')).toBe('allocated');
+    });
+
+    it('classifies faults as unhealthy', async () => {
+        const { nodeStateKind } = await import('../insights');
+        expect(nodeStateKind('IDLE+DRAIN')).toBe('unhealthy');
+        expect(nodeStateKind('DOWN+NOT_RESPONDING')).toBe('unhealthy');
+    });
+
+    it('classifies healthy-but-unobtainable states as other, not idle', async () => {
+        const { nodeStateKind } = await import('../insights');
+        // RESERVED/PLANNED nodes look idle but their capacity is promised elsewhere —
+        // painting them green would contradict the free-GPU math.
+        expect(nodeStateKind('IDLE+RESERVED')).toBe('other');
+        expect(nodeStateKind('IDLE+PLANNED')).toBe('other');
+        expect(nodeStateKind('IDLE+POWERED_DOWN')).toBe('other');
+    });
+});
+
+describe('compareNodeNames', () => {
+    it('sorts embedded numbers numerically', async () => {
+        const { compareNodeNames } = await import('../insights');
+        const names = ['1xtech-8b200-102-f3', '1xtech-8b200-68-f3', '1xtech-8b200-71-f3', '1xtech-8b200-103-f3'];
+        expect(names.sort(compareNodeNames)).toEqual([
+            '1xtech-8b200-68-f3', '1xtech-8b200-71-f3', '1xtech-8b200-102-f3', '1xtech-8b200-103-f3',
+        ]);
+    });
+});
+
 describe('parseDurationSeconds', () => {
     it('parses slurm duration formats', async () => {
         const { parseDurationSeconds } = await import('../insights');

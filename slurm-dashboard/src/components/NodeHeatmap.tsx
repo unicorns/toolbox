@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import type { PartitionData, NodeData, SlurmQueueItem } from '../types';
-import { getNodeGpuUsage, isNodeUnhealthy, trimNodeNames } from '../insights';
+import { getNodeGpuUsage, trimNodeNames, compareNodeNames, nodeStateKind, type NodeStateKind } from '../insights';
 import { parseTRES, formatMemoryMB, parseMemoryToMB } from '../parsing';
 import { NodeDetail } from './NodeDetail';
-import { BG_CARD, BORDER, SECTION_LABEL, TEXT_MUTED, nodeStateKind, type NodeStateKind } from './theme';
+import { BG_CARD, BORDER, SECTION_LABEL, TEXT_MUTED } from './theme';
 
 const CELL_TINT: Record<NodeStateKind, string> = {
     idle: 'border-emerald-300 bg-emerald-50 hover:border-emerald-500 dark:border-emerald-900 dark:bg-emerald-950/40 dark:hover:border-emerald-600',
@@ -20,30 +20,32 @@ const LEGEND: { kind: NodeStateKind; label: string; dotClass: string }[] = [
     { kind: 'unhealthy', label: 'down/drain', dotClass: 'bg-red-400' },
 ];
 
-function GpuDots({ total, allocated, unhealthy }: { total: number; allocated: number; unhealthy: boolean }) {
+/** Free dots glow green only when that capacity is actually obtainable. */
+function freeDotClass(kind: NodeStateKind): string {
+    if (kind === 'unhealthy') return 'bg-red-300 dark:bg-red-900';
+    if (kind === 'other') return 'bg-zinc-400/60 dark:bg-zinc-600';
+    return 'bg-emerald-500 dark:bg-emerald-400';
+}
+
+function GpuDots({ total, allocated, kind }: { total: number; allocated: number; kind: NodeStateKind }) {
+    const freeClass = freeDotClass(kind);
     return (
         <span className="flex max-w-[5.5rem] flex-wrap gap-[3px]" aria-hidden="true">
-            {Array.from({ length: total }, (_, i) => {
-                const isAllocated = i < allocated;
-                const dotClass = unhealthy
-                    ? 'bg-red-300 dark:bg-red-900'
-                    : isAllocated
-                        ? 'bg-zinc-300 dark:bg-zinc-700'
-                        : 'bg-emerald-500 dark:bg-emerald-400';
-                return <span key={i} className={`h-[7px] w-[7px] rounded-[2px] ${dotClass}`} />;
-            })}
+            {Array.from({ length: total }, (_, i) => (
+                <span key={i} className={`h-[7px] w-[7px] rounded-[2px] ${i < allocated ? 'bg-zinc-300 dark:bg-zinc-700' : freeClass}`} />
+            ))}
         </span>
     );
 }
 
-function CpuMiniBar({ details }: { details: Record<string, string> }) {
+function CpuMiniBar({ details, kind }: { details: Record<string, string>; kind: NodeStateKind }) {
     const cfg = parseTRES(details.CfgTRES ?? '');
     const alloc = parseTRES(details.AllocTRES ?? '');
     const total = parseInt(cfg.cpu || details.CPUTot || '0') || 0;
     const used = parseInt(alloc.cpu || details.CPUAlloc || '0') || 0;
     const fraction = total > 0 ? used / total : 0;
     return (
-        <span className="block h-[7px] w-[5.5rem] overflow-hidden rounded-[2px] bg-emerald-500 dark:bg-emerald-400" aria-hidden="true">
+        <span className={`block h-[7px] w-[5.5rem] overflow-hidden rounded-[2px] ${freeDotClass(kind)}`} aria-hidden="true">
             <span className="block h-full bg-zinc-300 dark:bg-zinc-700" style={{ width: `${fraction * 100}%` }} />
         </span>
     );
@@ -75,13 +77,13 @@ export function NodeHeatmap({ partitions, nodes, queue }: NodeHeatmapProps) {
         const seen = new Set<string>();
         const result: { partition: string; nodeNames: string[] }[] = [];
         for (const [name, partition] of Array.from(partitions.entries()).sort(([a], [b]) => a.localeCompare(b))) {
-            const nodeNames = Array.from(partition.nodes).filter(n => nodes.has(n)).sort();
+            const nodeNames = Array.from(partition.nodes).filter(n => nodes.has(n)).sort(compareNodeNames);
             if (nodeNames.length > 0) {
                 result.push({ partition: name, nodeNames });
                 nodeNames.forEach(n => seen.add(n));
             }
         }
-        const unassigned = Array.from(nodes.keys()).filter(n => !seen.has(n)).sort();
+        const unassigned = Array.from(nodes.keys()).filter(n => !seen.has(n)).sort(compareNodeNames);
         if (unassigned.length > 0) {
             result.push({ partition: partitions.size > 0 ? '(no partition)' : '', nodeNames: unassigned });
         }
@@ -118,7 +120,7 @@ export function NodeHeatmap({ partitions, nodes, queue }: NodeHeatmapProps) {
                             {nodeNames.map(name => {
                                 const details = nodes.get(name)!.details;
                                 const state = details.State ?? '';
-                                const kind = nodeStateKind(state, isNodeUnhealthy(state));
+                                const kind = nodeStateKind(state);
                                 const gpuUsage = getNodeGpuUsage(details);
                                 const isSelected = selected === name;
                                 return (
@@ -137,8 +139,8 @@ export function NodeHeatmap({ partitions, nodes, queue }: NodeHeatmapProps) {
                                             {shortLabels.get(name)}
                                         </span>
                                         {gpuUsage
-                                            ? <GpuDots total={gpuUsage.total} allocated={gpuUsage.allocated} unhealthy={kind === 'unhealthy'} />
-                                            : <CpuMiniBar details={details} />}
+                                            ? <GpuDots total={gpuUsage.total} allocated={gpuUsage.allocated} kind={kind} />
+                                            : <CpuMiniBar details={details} kind={kind} />}
                                     </button>
                                 );
                             })}

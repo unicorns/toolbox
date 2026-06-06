@@ -14,14 +14,38 @@ const UNHEALTHY_TOKENS = ['DOWN', 'DRAIN', 'FAIL', 'MAINT', 'INVAL', 'NOT_RESPON
  */
 const UNSCHEDULABLE_TOKENS = [...UNHEALTHY_TOKENS, 'POWER', 'RESERVED', 'PLANNED'];
 
+/**
+ * Matches each `+`-separated state segment by prefix, so DRAIN catches
+ * DRAINED/DRAINING but DOWN does not catch POWERED_DOWN.
+ */
+function stateMatches(state: string, tokens: string[]): boolean {
+    return state.toUpperCase().split('+')
+        .some(segment => tokens.some(token => segment.startsWith(token)));
+}
+
 export function isNodeUnhealthy(state: string): boolean {
-    const upper = state.toUpperCase();
-    return UNHEALTHY_TOKENS.some(token => upper.includes(token));
+    return stateMatches(state, UNHEALTHY_TOKENS);
 }
 
 export function isNodeSchedulable(state: string): boolean {
+    return !stateMatches(state, UNSCHEDULABLE_TOKENS);
+}
+
+export type NodeStateKind = 'idle' | 'mixed' | 'allocated' | 'unhealthy' | 'other';
+
+/**
+ * Display classification for a node. Healthy-but-unschedulable states
+ * (RESERVED/PLANNED/POWER*) classify as `other`, not `idle` — painting them
+ * green would contradict the free-capacity math.
+ */
+export function nodeStateKind(state: string): NodeStateKind {
+    if (isNodeUnhealthy(state)) return 'unhealthy';
     const upper = state.toUpperCase();
-    return !UNSCHEDULABLE_TOKENS.some(token => upper.includes(token));
+    if (upper.includes('ALLOCATED')) return 'allocated';
+    if (!isNodeSchedulable(state)) return 'other';
+    if (upper.includes('IDLE')) return 'idle';
+    if (upper.includes('MIXED')) return 'mixed';
+    return 'other';
 }
 
 function sumGpuEntries(entries: Record<string, number>): number {
@@ -36,6 +60,13 @@ export function getNodeGpuUsage(details: Record<string, string>): { total: numbe
     if (total === 0) return null;
     const allocated = parseUnitValue(parseTRES(details.AllocTRES ?? '').gres.gpu ?? '0');
     return { total, allocated };
+}
+
+const naturalCollator = new Intl.Collator(undefined, { numeric: true });
+
+/** Natural-order compare so node-102 sorts after node-68. */
+export function compareNodeNames(a: string, b: string): number {
+    return naturalCollator.compare(a, b);
 }
 
 /**

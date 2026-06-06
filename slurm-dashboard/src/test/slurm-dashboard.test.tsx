@@ -252,6 +252,8 @@ describe('Slurm Dashboard', () => {
       expect(within(detail).getByText('MIXED')).toBeInTheDocument()
       expect(within(detail).getByText('1336199')).toBeInTheDocument() // running job on a1
       expect(within(detail).getAllByText(/GRES\/GPU/).length).toBeGreaterThan(0)
+      // Job memory (AllocTRES mem=64G) is human-formatted
+      expect(within(detail).getByText(/mem 64\.0 GiB/)).toBeInTheDocument()
 
       // Clicking again deselects
       await user.click(within(heatmap).getByRole('button', { name: /node-a1/ }))
@@ -384,6 +386,26 @@ describe('Slurm Dashboard', () => {
 
       expect(screen.getAllByText('2025-07-04T10:10:30').length).toBeGreaterThan(0)
       expect(screen.getAllByText(/ago|in \d/).length).toBeGreaterThan(0)
+    })
+
+    it('prefers untruncated partition and name from scontrol details', async () => {
+      // squeue truncates columns (%.9P, %.30j); scontrol job lines carry full values
+      const paste = [
+        '             JOBID PARTITION                           NAME     USER    STATE       TIME TIME_LIMIT  NODES NODELIST(REASON)',
+        '            165874 b200_inf_                          bash   vineet  RUNNING      12:38  UNLIMITED      1 n1',
+        '---',
+        'JobId=165874 JobName=bash UserId=vineet(10013) JobState=RUNNING Partition=b200_inf_ib StartTime=2026-06-06T00:54:39 NodeList=n1 AllocTRES=cpu=32,mem=170G,node=1,gres/gpu=1',
+      ].join('\n')
+
+      render(<App />)
+      const textarea = screen.getByRole('textbox')
+      await user.click(textarea)
+      await user.paste(paste)
+      await user.click(screen.getByRole('button', { name: 'Analyze' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('b200_inf_ib')).toBeInTheDocument()
+      })
     })
   })
 

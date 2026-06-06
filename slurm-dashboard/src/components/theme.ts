@@ -1,5 +1,7 @@
 // Industrial ops-console palette: zinc surfaces, cyan accent, semantic states.
 
+import type { NodeStateKind } from '../insights';
+
 /** Muted/secondary text (labels, hints, empty-state messages). */
 export const TEXT_MUTED = 'text-zinc-500 dark:text-zinc-400';
 
@@ -19,17 +21,6 @@ export const BG_INSET = 'bg-zinc-100 dark:bg-zinc-950/60';
 export const SECTION_LABEL = `font-mono text-[11px] font-medium uppercase tracking-[0.14em] ${TEXT_MUTED}`;
 
 // --- NODE / JOB STATE COLOR MAPS ---
-
-export type NodeStateKind = 'idle' | 'mixed' | 'allocated' | 'unhealthy' | 'other';
-
-export function nodeStateKind(state: string, unhealthy: boolean): NodeStateKind {
-    if (unhealthy) return 'unhealthy';
-    const upper = state.toUpperCase();
-    if (upper.includes('IDLE')) return 'idle';
-    if (upper.includes('MIXED')) return 'mixed';
-    if (upper.includes('ALLOCATED')) return 'allocated';
-    return 'other';
-}
 
 export const NODE_STATE_BADGE: Record<NodeStateKind, string> = {
     idle: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',

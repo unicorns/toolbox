@@ -6,11 +6,13 @@ A collection of web-based tools for HPC (High-Performance Computing) cluster man
 
 ### [slurm-dashboard/](slurm-dashboard/) — Slurm Cluster Dashboard
 
-A modern single-page application for visualizing Slurm cluster status. Paste the output of a combined `scontrol`/`squeue`/`sacct` command and get an interactive breakdown of your cluster.
+A modern single-page application for visualizing Slurm cluster status. Paste the output of a combined `scontrol`/`squeue`/`sacct` command and get an interactive breakdown of your cluster. All data stays in the browser and is ephemeral — nothing is uploaded or stored.
 
 - **Stack:** React 19, TypeScript, Vite 7, Tailwind CSS 4
-- **Features:** Partition overview, per-node resource bars (CPU/memory/GPU), job queue with expandable details, job history with filtering, timezone-aware relative timestamps, GRES/TRES parsing
-- **Testing:** Vitest + React Testing Library (28+ tests covering parsing, rendering, and interaction)
+- **Overview:** per-partition capacity cards (free GPUs/CPUs/memory, largest single-node GPU block, idle counts, drained/down nodes with reasons, pending demand), a GPU-dot node heatmap with click-through node details, and a per-user usage table that flags week-old jobs
+- **Queue:** state filter chips, compact resource summaries, runtime-vs-limit bars, pending reasons, sortable columns, expandable TRES details
+- **History:** clickable state-count chips (failures grouped and tinted), text filtering, job steps
+- **Testing:** Vitest + React Testing Library (74 tests covering parsing, capacity math, rendering, and interaction)
 
 ## Usage
 

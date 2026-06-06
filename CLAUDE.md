@@ -4,16 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Architecture
 
-This repository contains multiple web projects for Slurm cluster management and visualization:
+This repository contains web projects for Slurm cluster management and visualization:
 
 ### Projects Structure
 - **slurm-dashboard/**: Modern React + TypeScript + Vite application for Slurm cluster visualization
-- **slurm/**: Standalone HTML dashboard with embedded JavaScript for Slurm cluster management
 
 ### Project Types
 The repository supports two types of web projects:
 1. **Node.js Projects**: Directories containing `package.json` files (built with npm)
-2. **Static Projects**: Directories containing HTML files (deployed as-is)
+2. **Static Projects**: Directories containing HTML files (deployed as-is; none currently)
 
 ## Development Commands
 
@@ -36,37 +35,22 @@ The GitHub Actions workflow automatically builds all projects:
 ## Code Architecture
 
 ### slurm-dashboard Architecture
-- **Single Page Application**: React-based dashboard with TypeScript
-- **Styling**: Tailwind CSS with Vite plugin integration
-- **State Management**: React hooks (useState, useEffect, useMemo, useCallback)
-- **Data Flow**: 
-  - Input parsing → Data transformation → Component rendering
-  - Slurm command output parsing into structured data objects
-  - Real-time visualization of cluster status
+- **Single Page Application**: React-based dashboard with TypeScript; paste-based input, all data ephemeral (no persistence)
+- **Styling**: Tailwind CSS 4 (CSS-first config in `src/index.css`), IBM Plex Sans/Mono via @fontsource, shared style constants in `src/components/theme.ts`
+- **State Management**: React hooks (useState, useEffect, useMemo, useCallback); no router or state library
+- **Layer split**:
+  - `src/parsing.ts` — Slurm output parsing (scontrol, squeue, sacct) into `SlurmData`
+  - `src/insights.ts` — pure compute: per-partition capacity (free GPUs/CPUs/mem over *schedulable* nodes), node schedulability/health classification, per-user usage aggregation, queue/history stats, node-name trimming
+  - `src/components/` — TopBar, InputPanel, CapacityCards, NodeHeatmap, NodeDetail, UserUsage, QueueTab, HistoryTab, JobDetails, plus theme.ts/ui.tsx primitives
+  - `src/App.tsx` — state + tab shell only (Overview / Queue / History)
 
 ### Core Data Structures
-```typescript
-interface SlurmData {
-    partitions: Map<string, { nodes: Set<string>; details: Record<string, string> }>;
-    nodes: Map<string, { details: Record<string, string> }>;
-    queue: any[];
-    history: any[];
-    clusterDate: string | null;
-    detectedTimezone: string | null;
-}
-```
+See `src/types.ts`: `SlurmData` (parsed input), `PartitionCapacity`/`ClusterTotals` (capacity math), `UserUsage`, `QueueStats`, `HistoryStateCount`.
 
-### Key Components
-- **Parsing Logic**: Functions to parse Slurm command outputs (scontrol, squeue, sacct)
-- **Visualization Components**: React components for partitions, nodes, job queue, and history
-- **Resource Management**: GRES (GPU/special resources) parsing and display
-- **Time Handling**: Timezone-aware relative time calculations
-
-### Static HTML Dashboard
-- **Self-contained**: Single HTML file with embedded CSS and JavaScript
-- **Vanilla JavaScript**: No external dependencies
-- **Similar functionality**: Parses same Slurm commands as React version
-- **AI Integration**: Optional AI summarization features
+### Capacity Semantics
+- A node contributes *free* capacity only if schedulable: its `State` has no segment starting with DOWN/DRAIN/FAIL/MAINT/INVAL/NOT_RESPONDING/POWER/RESERVED/PLANNED
+- Unhealthy (DOWN/DRAIN/FAIL/MAINT/INVAL/NOT_RESPONDING) nodes are listed under ⚠ unavailable with their `Reason`
+- RESERVED/PLANNED/POWER* nodes are healthy but unobtainable: excluded from free counts and rendered gray (not green) in the heatmap
 
 ## Configuration
 
@@ -74,7 +58,7 @@ interface SlurmData {
 ```yaml
 env:
   NODE_PROJECTS: "slurm-dashboard"    # Space-separated list of Node.js projects
-  STATIC_PROJECTS: "slurm"            # Space-separated list of static projects
+  STATIC_PROJECTS: ""                 # Space-separated list of static projects
 ```
 
 ### Build Configuration
@@ -98,7 +82,7 @@ env:
 - Pin GitHub Actions to specific commit SHAs (not version tags)
 
 ### Slurm Command Integration
-The dashboards parse output from this combined command:
+The dashboard parses output from this combined command (defined as `SLURM_COMMAND` in `src/parsing.ts`):
 ```bash
 scontrol show partition --oneliner; echo "---"; scontrol show node --oneliner; echo "---"; squeue --all -o "%.18i %.9P %.30j %.8u %.8T %.10M %.10l %.6D %R"; echo "---"; scontrol show job --oneliner; echo "---"; sacct -a --starttime "now-1day" --parsable2 --format=JobID,JobName,User,Partition,State,Start,End,Elapsed,ReqMem,ReqCPUS,ReqTRES; echo "---"; date --iso-8601=seconds
 ```
@@ -118,7 +102,7 @@ scontrol show partition --oneliner; echo "---"; scontrol show node --oneliner; e
 
 ### GitHub Pages
 - Automated deployment via GitHub Actions
-- Each project deployed to its own path (e.g., `/slurm-dashboard/`, `/slurm/`)
+- Each project deployed to its own path (e.g., `/slurm-dashboard/`)
 - No manual index page generation - projects are self-contained
 - Static files copied directly, React apps built and deployed from `dist/`
 
